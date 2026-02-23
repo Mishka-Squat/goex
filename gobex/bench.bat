@@ -1,0 +1,1 @@
+go.exe test -test.fullpath=true -benchmem -cpuprofile cpu.pprof -memprofile mem.pprof -run=^$ -bench ^BenchmarkEncodeComplex128Slice$ github.com/Mishka-Squat/goex/gobex
