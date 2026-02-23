@@ -139,9 +139,9 @@ func benchmarkEncodeSlice(b *testing.B, a any) {
 	b.ReportAllocs()
 	b.RunParallel(func(pb *testing.PB) {
 		var buf bytes.Buffer
-		enc := NewEncoder(&buf)
 
 		for pb.Next() {
+			enc := NewEncoder(&buf)
 			buf.Reset()
 			err := enc.Encode(a)
 			if err != nil {

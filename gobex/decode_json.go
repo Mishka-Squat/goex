@@ -3,39 +3,37 @@ package gobex
 import (
 	"errors"
 	"reflect"
-
-	"github.com/Mishka-Squat/goex/gx"
 )
 
 func decAnyValue(state *decoderState, kind reflect.Kind) any {
 	// Index by Go types.
 	switch kind {
 	case reflect.Bool:
-		return gx.Must(decBoolValue(state))
+		return must(decBoolValue(state))
 	case reflect.Int8:
-		return gx.Must(decInt8Value(state))
+		return must(decInt8Value(state))
 	case reflect.Int16:
-		return gx.Must(decInt16Value(state))
+		return must(decInt16Value(state))
 	case reflect.Int32:
-		return gx.Must(decInt32Value(state))
+		return must(decInt32Value(state))
 	case reflect.Int64:
-		return gx.Must(decInt64Value(state))
+		return must(decInt64Value(state))
 	case reflect.Uint8:
-		return gx.Must(decUint8Value(state))
+		return must(decUint8Value(state))
 	case reflect.Uint16:
-		return gx.Must(decUint16Value(state))
+		return must(decUint16Value(state))
 	case reflect.Uint32:
-		return gx.Must(decUint32Value(state))
+		return must(decUint32Value(state))
 	case reflect.Uint64:
-		return gx.Must(decUint64Value(state))
+		return must(decUint64Value(state))
 	case reflect.Float32:
-		return gx.Must(decFloat32Value(state))
+		return must(decFloat32Value(state))
 	case reflect.Float64:
-		return gx.Must(decFloat64Value(state))
+		return must(decFloat64Value(state))
 	case reflect.Complex64:
-		return gx.Must(decComplex64Value(state))
+		return must(decComplex64Value(state))
 	case reflect.Complex128:
-		return gx.Must(decComplex128Value(state))
+		return must(decComplex128Value(state))
 	case reflect.String:
 		return decStringValue(state)
 	}

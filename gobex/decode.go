@@ -357,47 +357,47 @@ func decStringValue(state *decoderState) string {
 
 // decBool decodes a uint and stores it as a boolean in value.
 func decBool(state *decoderState, value reflect.Value) {
-	value.SetBool(gx.Must(decBoolValue(state)))
+	value.SetBool(must(decBoolValue(state)))
 }
 
 // decInt8 decodes an integer and stores it as an int8 in value.
 func decInt8(state *decoderState, value reflect.Value) {
-	value.SetInt(int64(gx.Must(decInt8Value(state))))
+	value.SetInt(int64(must(decInt8Value(state))))
 }
 
 // decUint8 decodes an unsigned integer and stores it as a uint8 in value.
 func decUint8(state *decoderState, value reflect.Value) {
-	value.SetUint(uint64(gx.Must(decUint8Value(state))))
+	value.SetUint(uint64(must(decUint8Value(state))))
 }
 
 // decInt16 decodes an integer and stores it as an int16 in value.
 func decInt16(state *decoderState, value reflect.Value) {
-	value.SetInt(int64(gx.Must(decInt16Value(state))))
+	value.SetInt(int64(must(decInt16Value(state))))
 }
 
 // decUint16 decodes an unsigned integer and stores it as a uint16 in value.
 func decUint16(state *decoderState, value reflect.Value) {
-	value.SetUint(uint64(gx.Must(decUint16Value(state))))
+	value.SetUint(uint64(must(decUint16Value(state))))
 }
 
 // decInt32 decodes an integer and stores it as an int32 in value.
 func decInt32(state *decoderState, value reflect.Value) {
-	value.SetInt(int64(gx.Must(decInt32Value(state))))
+	value.SetInt(int64(must(decInt32Value(state))))
 }
 
 // decUint32 decodes an unsigned integer and stores it as a uint32 in value.
 func decUint32(state *decoderState, value reflect.Value) {
-	value.SetUint(uint64(gx.Must(decUint32Value(state))))
+	value.SetUint(uint64(must(decUint32Value(state))))
 }
 
 // decInt64 decodes an integer and stores it as an int64 in value.
 func decInt64(state *decoderState, value reflect.Value) {
-	value.SetInt(gx.Must(decInt64Value(state)))
+	value.SetInt(must(decInt64Value(state)))
 }
 
 // decUint64 decodes an unsigned integer and stores it as a uint64 in value.
 func decUint64(state *decoderState, value reflect.Value) {
-	value.SetUint(gx.Must(decUint64Value(state)))
+	value.SetUint(must(decUint64Value(state)))
 }
 
 // Floating-point numbers are transmitted as uint64s holding the bits
@@ -434,27 +434,27 @@ func float32FromBits(u uint64) (float32, error) {
 // decFloat32 decodes an unsigned integer, treats it as a 32-bit floating-point
 // number, and stores it in value.
 func decFloat32(state *decoderState, value reflect.Value) {
-	value.SetFloat(float64(gx.Must(decFloat32Value(state))))
+	value.SetFloat(float64(must(decFloat32Value(state))))
 }
 
 // decFloat64 decodes an unsigned integer, treats it as a 64-bit floating-point
 // number, and stores it in value.
 func decFloat64(state *decoderState, value reflect.Value) {
-	value.SetFloat(gx.Must(decFloat64Value(state)))
+	value.SetFloat(must(decFloat64Value(state)))
 }
 
 // decComplex64 decodes a pair of unsigned integers, treats them as a
 // pair of floating point numbers, and stores them as a complex64 in value.
 // The real part comes first.
 func decComplex64(state *decoderState, value reflect.Value) {
-	value.SetComplex(complex128(gx.Must(decComplex64Value(state))))
+	value.SetComplex(complex128(must(decComplex64Value(state))))
 }
 
 // decComplex128 decodes a pair of unsigned integers, treats them as a
 // pair of floating point numbers, and stores them as a complex128 in value.
 // The real part comes first.
 func decComplex128(state *decoderState, value reflect.Value) {
-	value.SetComplex(gx.Must(decComplex128Value(state)))
+	value.SetComplex(must(decComplex128Value(state)))
 }
 
 // decUint8Slice decodes a byte slice and stores in value a slice header
@@ -530,6 +530,84 @@ func ignoreUint8Array(state *decoderState, value reflect.Value) {
 type decEngine struct {
 	instr    []decInstr
 	numInstr int // the number of active instructions
+}
+
+// compileSingle compiles the decoder engine for a non-struct top-level value, including
+// GobDecoders.
+func (engine *decEngine) compileSingle(dec *Decoder, remoteId typeId, ut *userTypeInfo) error {
+	rt := ut.user
+	engine.instr = make([]decInstr, 1) // one item
+	name := rt.String()                // best we can do
+	if !dec.compatibleType(rt, remoteId, make(map[reflect.Type]typeId)) {
+		remoteType := dec.typeString(remoteId)
+		// Common confusing case: local interface type, remote concrete type.
+		if ut.base.Kind() == reflect.Interface && remoteId.id() != tInterface.id() {
+			return errors.New("gob: local interface type " + name + " can only be decoded from remote interface type; received concrete type " + remoteType)
+		}
+		return errors.New("gob: decoding into local type " + name + ", received remote type " + remoteType)
+	}
+	op := dec.decOpFor(remoteId, rt, name, make(map[reflect.Type]*decOp))
+	engine.instr[singletonField] = decInstr{*op, singletonField, nil}
+	engine.numInstr = 1
+	return nil
+}
+
+// compileIgnoreSingle compiles the decoder engine for a non-struct top-level value that will be discarded.
+func (engine *decEngine) compileIgnoreSingle(dec *Decoder, remoteId typeId) {
+	engine.instr = make([]decInstr, 1) // one item
+	op := dec.decIgnoreOpFor(remoteId, make(map[typeId]*decOp))
+	engine.instr[0] = decInstr{*op, 0, nil}
+	engine.numInstr = 1
+}
+
+// compileDec compiles the decoder engine for a value. If the value is not a struct,
+// it calls out to compileSingle.
+func (engine *decEngine) compileDec(dec *Decoder, remoteId typeId, ut *userTypeInfo) (err error) {
+	defer catchError(&err)
+	rt := ut.base
+	srt := rt
+	if srt.Kind() != reflect.Struct || ut.externalDec != 0 {
+		return engine.compileSingle(dec, remoteId, ut)
+	}
+	var wireStruct *structType
+	// Builtin types can come from global pool; the rest must be defined by the decoder.
+	// Also we know we're decoding a struct now, so the client must have sent one.
+	if t := builtinIdToType(remoteId); t != nil {
+		wireStruct, _ = t.(*structType)
+	} else {
+		wire := dec.wireType[remoteId.id()]
+		if wire == nil {
+			error_(errBadType)
+		}
+		wireStruct = wire.StructT
+	}
+	if wireStruct == nil {
+		errorf("type mismatch in decoder: want struct type %s; got non-struct", rt)
+	}
+	engine.instr = make([]decInstr, len(wireStruct.Field))
+	seen := make(map[reflect.Type]*decOp)
+	// Loop over the fields of the wire type.
+	for fieldnum := 0; fieldnum < len(wireStruct.Field); fieldnum++ {
+		wireField := wireStruct.Field[fieldnum]
+		if wireField.Name == "" {
+			errorf("empty name for remote field of type %s", wireStruct.Name)
+		}
+		// Find the field of the local type with the same name.
+		localField, present := srt.FieldByName(wireField.Name)
+		// TODO(r): anonymous names
+		if !present || !isExported(wireField.Name) {
+			op := dec.decIgnoreOpFor(wireField.Id, make(map[typeId]*decOp))
+			engine.instr[fieldnum] = decInstr{*op, fieldnum, nil}
+			continue
+		}
+		if !dec.compatibleType(localField.Type, wireField.Id, make(map[reflect.Type]typeId)) {
+			errorf("wrong type (%s) for received field %s.%s", localField.Type, wireStruct.Name, wireField.Name)
+		}
+		op := dec.decOpFor(wireField.Id, localField.Type, localField.Name, seen)
+		engine.instr[fieldnum] = decInstr{*op, fieldnum, localField.Index}
+		engine.numInstr++
+	}
+	return
 }
 
 // decodeSingle decodes a top-level value that is not a struct and stores it in value.
@@ -965,13 +1043,13 @@ func (dec *Decoder) decOpFor(wireId typeId, rt reflect.Type, name string, inProg
 		case reflect.Struct:
 			// Generate a closure that calls out to the engine for the nested type.
 			ut := userType(typ)
-			enginePtr, err := dec.getDecEnginePtr(wireId, ut)
+			engine, err := dec.getDecEnginePtr(wireId, ut)
 			if err != nil {
 				error_(err)
 			}
 			op = func(state *decoderState, value reflect.Value) {
 				// indirect through enginePtr to delay evaluation for recursive structs.
-				dec.decodeStruct(*enginePtr, value)
+				dec.decodeStruct(engine, value)
 			}
 		case reflect.Interface:
 			op = func(state *decoderState, value reflect.Value) {
@@ -1041,13 +1119,13 @@ func (dec *Decoder) decIgnoreOpFor(wireId typeId, inProgress map[typeId]*decOp) 
 
 		case wire.StructT != nil:
 			// Generate a closure that calls out to the engine for the nested type.
-			enginePtr, err := dec.getIgnoreEnginePtr(wireId)
+			engine, err := dec.getIgnoreEnginePtr(wireId)
 			if err != nil {
 				error_(err)
 			}
 			op = func(state *decoderState, value reflect.Value) {
 				// indirect through enginePtr to delay evaluation for recursive structs
-				state.dec.ignoreStruct(*enginePtr)
+				state.dec.ignoreStruct(engine)
 			}
 
 		case wire.GobEncoderT != nil, wire.BinaryMarshalerT != nil, wire.TextMarshalerT != nil:
@@ -1169,101 +1247,19 @@ func (dec *Decoder) typeString(remoteId typeId) string {
 	return dec.wireType[remoteId.id()].string()
 }
 
-// compileSingle compiles the decoder engine for a non-struct top-level value, including
-// GobDecoders.
-func (dec *Decoder) compileSingle(remoteId typeId, ut *userTypeInfo) (engine *decEngine, err error) {
-	rt := ut.user
-	engine = new(decEngine)
-	engine.instr = make([]decInstr, 1) // one item
-	name := rt.String()                // best we can do
-	if !dec.compatibleType(rt, remoteId, make(map[reflect.Type]typeId)) {
-		remoteType := dec.typeString(remoteId)
-		// Common confusing case: local interface type, remote concrete type.
-		if ut.base.Kind() == reflect.Interface && remoteId.id() != tInterface.id() {
-			return nil, errors.New("gob: local interface type " + name + " can only be decoded from remote interface type; received concrete type " + remoteType)
-		}
-		return nil, errors.New("gob: decoding into local type " + name + ", received remote type " + remoteType)
-	}
-	op := dec.decOpFor(remoteId, rt, name, make(map[reflect.Type]*decOp))
-	engine.instr[singletonField] = decInstr{*op, singletonField, nil}
-	engine.numInstr = 1
-	return
-}
-
-// compileIgnoreSingle compiles the decoder engine for a non-struct top-level value that will be discarded.
-func (dec *Decoder) compileIgnoreSingle(remoteId typeId) *decEngine {
-	engine := new(decEngine)
-	engine.instr = make([]decInstr, 1) // one item
-	op := dec.decIgnoreOpFor(remoteId, make(map[typeId]*decOp))
-	engine.instr[0] = decInstr{*op, 0, nil}
-	engine.numInstr = 1
-	return engine
-}
-
-// compileDec compiles the decoder engine for a value. If the value is not a struct,
-// it calls out to compileSingle.
-func (dec *Decoder) compileDec(remoteId typeId, ut *userTypeInfo) (engine *decEngine, err error) {
-	defer catchError(&err)
-	rt := ut.base
-	srt := rt
-	if srt.Kind() != reflect.Struct || ut.externalDec != 0 {
-		return dec.compileSingle(remoteId, ut)
-	}
-	var wireStruct *structType
-	// Builtin types can come from global pool; the rest must be defined by the decoder.
-	// Also we know we're decoding a struct now, so the client must have sent one.
-	if t := builtinIdToType(remoteId); t != nil {
-		wireStruct, _ = t.(*structType)
-	} else {
-		wire := dec.wireType[remoteId.id()]
-		if wire == nil {
-			error_(errBadType)
-		}
-		wireStruct = wire.StructT
-	}
-	if wireStruct == nil {
-		errorf("type mismatch in decoder: want struct type %s; got non-struct", rt)
-	}
-	engine = new(decEngine)
-	engine.instr = make([]decInstr, len(wireStruct.Field))
-	seen := make(map[reflect.Type]*decOp)
-	// Loop over the fields of the wire type.
-	for fieldnum := 0; fieldnum < len(wireStruct.Field); fieldnum++ {
-		wireField := wireStruct.Field[fieldnum]
-		if wireField.Name == "" {
-			errorf("empty name for remote field of type %s", wireStruct.Name)
-		}
-		// Find the field of the local type with the same name.
-		localField, present := srt.FieldByName(wireField.Name)
-		// TODO(r): anonymous names
-		if !present || !isExported(wireField.Name) {
-			op := dec.decIgnoreOpFor(wireField.Id, make(map[typeId]*decOp))
-			engine.instr[fieldnum] = decInstr{*op, fieldnum, nil}
-			continue
-		}
-		if !dec.compatibleType(localField.Type, wireField.Id, make(map[reflect.Type]typeId)) {
-			errorf("wrong type (%s) for received field %s.%s", localField.Type, wireStruct.Name, wireField.Name)
-		}
-		op := dec.decOpFor(wireField.Id, localField.Type, localField.Name, seen)
-		engine.instr[fieldnum] = decInstr{*op, fieldnum, localField.Index}
-		engine.numInstr++
-	}
-	return
-}
-
 // getDecEnginePtr returns the engine for the specified type.
-func (dec *Decoder) getDecEnginePtr(remoteId typeId, ut *userTypeInfo) (enginePtr **decEngine, err error) {
+func (dec *Decoder) getDecEnginePtr(remoteId typeId, ut *userTypeInfo) (engine *decEngine, err error) {
 	rt := ut.user
 	decoderMap, ok := dec.decoderCache[rt]
 	if !ok {
-		decoderMap = make(map[typeId]**decEngine)
+		decoderMap = make(map[typeId]*decEngine)
 		dec.decoderCache[rt] = decoderMap
 	}
-	if enginePtr, ok = decoderMap[remoteId]; !ok {
+	if engine, ok = decoderMap[remoteId]; !ok {
 		// To handle recursive types, mark this engine as underway before compiling.
-		enginePtr = new(*decEngine)
-		decoderMap[remoteId] = enginePtr
-		*enginePtr, err = dec.compileDec(remoteId, ut)
+		engine = new(decEngine)
+		decoderMap[remoteId] = engine
+		err = engine.compileDec(dec, remoteId, ut)
 		if err != nil {
 			delete(decoderMap, remoteId)
 		}
@@ -1277,17 +1273,17 @@ type emptyStruct struct{}
 var emptyStructType = reflect.TypeFor[emptyStruct]()
 
 // getIgnoreEnginePtr returns the engine for the specified type when the value is to be discarded.
-func (dec *Decoder) getIgnoreEnginePtr(wireId typeId) (enginePtr **decEngine, err error) {
+func (dec *Decoder) getIgnoreEnginePtr(wireId typeId) (engine *decEngine, err error) {
 	var ok bool
-	if enginePtr, ok = dec.ignorerCache[wireId]; !ok {
+	if engine, ok = dec.ignorerCache[wireId]; !ok {
 		// To handle recursive types, mark this engine as underway before compiling.
-		enginePtr = new(*decEngine)
-		dec.ignorerCache[wireId] = enginePtr
+		engine = new(decEngine)
+		dec.ignorerCache[wireId] = engine
 		wire := dec.wireType[wireId.id()]
 		if wire != nil && wire.StructT != nil {
-			*enginePtr, err = dec.compileDec(wireId, userType(emptyStructType))
+			err = engine.compileDec(dec, wireId, userType(emptyStructType))
 		} else {
-			*enginePtr = dec.compileIgnoreSingle(wireId)
+			engine.compileIgnoreSingle(dec, wireId)
 		}
 		if err != nil {
 			delete(dec.ignorerCache, wireId)
@@ -1307,13 +1303,12 @@ func (dec *Decoder) decodeValue(wireId typeId, value reflect.Value) {
 	// Dereference down to the underlying type.
 	ut := userType(value.Type())
 	base := ut.base
-	var enginePtr **decEngine
-	enginePtr, dec.err = dec.getDecEnginePtr(wireId, ut)
+	var engine *decEngine
+	engine, dec.err = dec.getDecEnginePtr(wireId, ut)
 	if dec.err != nil {
 		return
 	}
 	value = decAlloc(value)
-	engine := *enginePtr
 	if st := base; st.Kind() == reflect.Struct && ut.externalDec == 0 {
 		wt := dec.wireType[wireId.id()]
 		if engine.numInstr == 0 && st.NumField() > 0 &&
@@ -1329,16 +1324,16 @@ func (dec *Decoder) decodeValue(wireId typeId, value reflect.Value) {
 
 // decodeIgnoredValue decodes the data stream representing a value of the specified type and discards it.
 func (dec *Decoder) decodeIgnoredValue(wireId typeId) {
-	var enginePtr **decEngine
-	enginePtr, dec.err = dec.getIgnoreEnginePtr(wireId)
+	var engine *decEngine
+	engine, dec.err = dec.getIgnoreEnginePtr(wireId)
 	if dec.err != nil {
 		return
 	}
 	wire := dec.wireType[wireId.id()]
 	if wire != nil && wire.StructT != nil {
-		dec.ignoreStruct(*enginePtr)
+		dec.ignoreStruct(engine)
 	} else {
-		dec.ignoreSingle(*enginePtr)
+		dec.ignoreSingle(engine)
 	}
 }
 

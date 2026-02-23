@@ -28,14 +28,14 @@ const tooBig = (1 << 30) << (^uint(0) >> 62)
 // and its limits are not configurable. Take caution when decoding gob data
 // from untrusted sources.
 type Decoder struct {
-	mutex        sync.Mutex                              // each item must be received atomically
-	r            io.Reader                               // source of the data
-	buf          decBuffer                               // buffer for more efficient i/o from r
-	wireType     map[pureTypeId]*wireType                // map from remote ID to local description
-	decoderCache map[reflect.Type]map[typeId]**decEngine // cache of compiled engines
-	ignorerCache map[typeId]**decEngine                  // ditto for ignored objects
-	freeList     *decoderState                           // list of free decoderStates; avoids reallocation
-	countBuf     []byte                                  // used for decoding integers while parsing messages
+	mutex        sync.Mutex                             // each item must be received atomically
+	r            io.Reader                              // source of the data
+	buf          decBuffer                              // buffer for more efficient i/o from r
+	wireType     map[pureTypeId]*wireType               // map from remote ID to local description
+	decoderCache map[reflect.Type]map[typeId]*decEngine // cache of compiled engines
+	ignorerCache map[typeId]*decEngine                  // ditto for ignored objects
+	freeList     *decoderState                          // list of free decoderStates; avoids reallocation
+	countBuf     []byte                                 // used for decoding integers while parsing messages
 	err          error
 	// ignoreDepth tracks the depth of recursively parsed ignored fields
 	ignoreDepth int
@@ -52,8 +52,8 @@ func NewDecoder(r io.Reader) *Decoder {
 	}
 	dec.r = r
 	dec.wireType = make(map[pureTypeId]*wireType)
-	dec.decoderCache = make(map[reflect.Type]map[typeId]**decEngine)
-	dec.ignorerCache = make(map[typeId]**decEngine)
+	dec.decoderCache = make(map[reflect.Type]map[typeId]*decEngine)
+	dec.ignorerCache = make(map[typeId]*decEngine)
 	dec.countBuf = make([]byte, 9) // counts may be uint64s (unlikely!), require 9 bytes
 
 	return dec

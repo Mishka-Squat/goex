@@ -29,6 +29,13 @@ func error_(err error) {
 	panic(gobError{err})
 }
 
+func must[T any](v T, e error) T {
+	if e != nil {
+		error_(e)
+	}
+	return v
+}
+
 // catchError is meant to be used as a deferred function to turn a panic(gobError) into a
 // plain error. It overwrites the error return of the function that deferred its call.
 func catchError(err *error) {
