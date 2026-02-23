@@ -90,21 +90,11 @@ func (d *decBuffer) Reset() {
 
 // We pass the bytes.Buffer separately for easier testing of the infrastructure
 // without requiring a full Decoder.
-func (dec *Decoder) newDecoderState(buf *decBuffer) *decoderState {
-	d := dec.freeList
-	if d == nil {
-		d = new(decoderState)
-		d.dec = dec
-	} else {
-		dec.freeList = d.next
+func (dec *Decoder) newDecoderState(buf *decBuffer) decoderState {
+	return decoderState{
+		dec: dec,
+		b:   buf,
 	}
-	d.b = buf
-	return d
-}
-
-func (dec *Decoder) freeDecoderState(d *decoderState) {
-	d.next = dec.freeList
-	dec.freeList = d
 }
 
 func overflow(name string) error {
@@ -547,13 +537,12 @@ type decEngine struct {
 // struct field (although with an illegal field number).
 func (dec *Decoder) decodeSingle(engine *decEngine, value reflect.Value) {
 	state := dec.newDecoderState(&dec.buf)
-	//defer dec.freeDecoderState(state)
 	state.fieldnum = singletonField
 	if state.decodeUint() != 0 {
 		errorf("decode: corrupted data: non-zero delta for singleton")
 	}
 	instr := &engine.instr[singletonField]
-	instr.op(state, value)
+	instr.op(&state, value)
 }
 
 // decodeStruct decodes a top-level struct and stores it in value.
@@ -563,7 +552,6 @@ func (dec *Decoder) decodeSingle(engine *decEngine, value reflect.Value) {
 // from the user's value, not from the innards of an engine.
 func (dec *Decoder) decodeStruct(engine *decEngine, value reflect.Value) {
 	state := dec.newDecoderState(&dec.buf)
-	defer dec.freeDecoderState(state)
 	state.fieldnum = -1
 	for state.b.Len() > 0 {
 		delta := int(state.decodeUint())
@@ -586,7 +574,7 @@ func (dec *Decoder) decodeStruct(engine *decEngine, value reflect.Value) {
 				field = decAlloc(field)
 			}
 		}
-		instr.op(state, field)
+		instr.op(&state, field)
 		state.fieldnum = fieldnum
 	}
 }
@@ -596,7 +584,6 @@ var noValue reflect.Value
 // ignoreStruct discards the data for a struct with no destination.
 func (dec *Decoder) ignoreStruct(engine *decEngine) {
 	state := dec.newDecoderState(&dec.buf)
-	defer dec.freeDecoderState(state)
 	state.fieldnum = -1
 	for state.b.Len() > 0 {
 		delta := int(state.decodeUint())
@@ -611,7 +598,7 @@ func (dec *Decoder) ignoreStruct(engine *decEngine) {
 			error_(errRange)
 		}
 		instr := &engine.instr[fieldnum]
-		instr.op(state, noValue)
+		instr.op(&state, noValue)
 		state.fieldnum = fieldnum
 	}
 }
@@ -620,14 +607,13 @@ func (dec *Decoder) ignoreStruct(engine *decEngine) {
 // destination. It's used when calling Decode with a nil value.
 func (dec *Decoder) ignoreSingle(engine *decEngine) {
 	state := dec.newDecoderState(&dec.buf)
-	defer dec.freeDecoderState(state)
 	state.fieldnum = singletonField
 	delta := int(state.decodeUint())
 	if delta != 0 {
 		errorf("decode: corrupted data: non-zero delta for singleton")
 	}
 	instr := &engine.instr[singletonField]
-	instr.op(state, noValue)
+	instr.op(&state, noValue)
 }
 
 // decodeArrayHelper does the work for decoding arrays and slices.

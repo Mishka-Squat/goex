@@ -7,7 +7,7 @@ import (
 	"github.com/Mishka-Squat/goex/gx"
 )
 
-func decAnyValue(kind reflect.Kind, state *decoderState) any {
+func decAnyValue(state *decoderState, kind reflect.Kind) any {
 	// Index by Go types.
 	switch kind {
 	case reflect.Bool:
@@ -63,7 +63,7 @@ func (dec *Decoder) decodeSliceAny(state *decoderState, elemId typeId) []any {
 	if elemId.isBuiltin() {
 		kind = dec.typeKind(elemId)
 		for i := range value {
-			value[i] = decAnyValue(kind, state)
+			value[i] = decAnyValue(state, kind)
 		}
 	} else {
 		for i := range value {
@@ -84,13 +84,12 @@ func (dec *Decoder) decodeJsonAnyValue(wireId typeId) any {
 	}
 
 	state := dec.newDecoderState(&dec.buf)
-	defer dec.freeDecoderState(state)
 	state.fieldnum = singletonField
 	if state.decodeUint() != 0 {
 		errorf("decode: corrupted data: non-zero delta for singleton")
 	}
 	if wt.ArrayT != nil || wt.SliceT != nil {
-		return dec.decodeJsonSlice(state, wt)
+		return dec.decodeJsonSlice(&state, wt)
 	}
 
 	return nil
@@ -106,7 +105,6 @@ func (dec *Decoder) decodeJsonStruct(wt *wireType) map[string]any {
 
 	defer catchError(&dec.err)
 	state := dec.newDecoderState(&dec.buf)
-	defer dec.freeDecoderState(state)
 	state.fieldnum = -1
 
 	value := map[string]any{}
@@ -145,13 +143,13 @@ func (dec *Decoder) decodeJsonStruct(wt *wireType) map[string]any {
 			} else {
 				elemId = dec.wireType[field.Id.id()].SliceT.Elem
 			}
-			value[field.Name] = state.dec.decodeSliceAny(state, elemId /*, *elemOp, ovfl, helper*/)
+			value[field.Name] = state.dec.decodeSliceAny(&state, elemId /*, *elemOp, ovfl, helper*/)
 		case reflect.Struct:
 			value[field.Name] = dec.decodeJsonStruct(dec.wireType[field.Id.id()])
 		case reflect.Interface:
 			//state.dec.decodeInterface(t, state, value)
 		default:
-			value[field.Name] = decAnyValue(kind, state)
+			value[field.Name] = decAnyValue(&state, kind)
 		}
 		//var field reflect.Value
 		//instr.op(instr, state, field)
