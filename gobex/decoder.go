@@ -7,9 +7,12 @@ package gobex
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"io"
 	"reflect"
 	"sync"
+
+	"github.com/Mishka-Squat/goex/unsafeex"
 )
 
 // tooBig provides a sanity check for sizes; used in several places. Upper limit
@@ -28,7 +31,7 @@ type Decoder struct {
 	mutex        sync.Mutex                              // each item must be received atomically
 	r            io.Reader                               // source of the data
 	buf          decBuffer                               // buffer for more efficient i/o from r
-	wireType     map[typeId]*wireType                    // map from remote ID to local description
+	wireType     map[pureTypeId]*wireType                // map from remote ID to local description
 	decoderCache map[reflect.Type]map[typeId]**decEngine // cache of compiled engines
 	ignorerCache map[typeId]**decEngine                  // ditto for ignored objects
 	freeList     *decoderState                           // list of free decoderStates; avoids reallocation
@@ -48,7 +51,7 @@ func NewDecoder(r io.Reader) *Decoder {
 		r = bufio.NewReader(r)
 	}
 	dec.r = r
-	dec.wireType = make(map[typeId]*wireType)
+	dec.wireType = make(map[pureTypeId]*wireType)
 	dec.decoderCache = make(map[reflect.Type]map[typeId]**decEngine)
 	dec.ignorerCache = make(map[typeId]**decEngine)
 	dec.countBuf = make([]byte, 9) // counts may be uint64s (unlikely!), require 9 bytes
@@ -56,10 +59,102 @@ func NewDecoder(r io.Reader) *Decoder {
 	return dec
 }
 
+func (dec *Decoder) typeSize(id typeId) uint32 {
+	if id.isBuiltin() {
+		if size := id.size(); size != 0 {
+			return size
+		}
+
+		t := builtinIdToType(id)
+		switch t.name() {
+		case "string":
+			return uint32(unsafeex.Sizeof[string]())
+		case "interface":
+			return uint32(unsafeex.Sizeof[any]())
+		}
+
+		fmt.Println("typeSize: We should not be here")
+		return 0
+	} else {
+		w := dec.wireType[id.id()]
+		switch w.Kind() {
+		case reflect.Array:
+			return 0
+		case reflect.Slice:
+			return uint32(unsafeex.Sizeof[[]any]())
+		case reflect.Struct:
+			var size uint32
+			for _, f := range w.StructT.Field {
+				size += dec.typeSize(f.Id)
+			}
+			return size
+		case reflect.Map:
+			return uint32(unsafeex.Sizeof[map[any]any]())
+		}
+	}
+
+	return 0
+}
+
+func (dec *Decoder) typeKind(id typeId) reflect.Kind {
+	if id.isBuiltin() {
+		t := builtinIdToType(id)
+		switch t.name() {
+		case "bool":
+			return reflect.Bool
+		case "int":
+			switch id.size() {
+			case 8 / 8:
+				return reflect.Int8
+			case 16 / 8:
+				return reflect.Int16
+			case 32 / 8:
+				return reflect.Int32
+			case 64 / 8:
+				return reflect.Int64
+			}
+		case "uint":
+			switch id.size() {
+			case 8 / 8:
+				return reflect.Uint8
+			case 16 / 8:
+				return reflect.Uint16
+			case 32 / 8:
+				return reflect.Uint32
+			case 64 / 8:
+				return reflect.Uint64
+			}
+		case "float":
+			switch id.size() {
+			case 32 / 8:
+				return reflect.Float32
+			case 64 / 8:
+				return reflect.Float64
+			}
+		case "bytes":
+			return reflect.Slice
+		case "string":
+			return reflect.String
+		case "complex":
+			switch id.size() {
+			case 64 / 8:
+				return reflect.Complex64
+			case 128 / 8:
+				return reflect.Complex128
+			}
+		case "interface":
+			return reflect.Interface
+		}
+
+	}
+
+	return dec.wireType[id.id()].Kind()
+}
+
 // recvType loads the definition of a type.
 func (dec *Decoder) recvType(id typeId) {
 	// Have we already seen this type? That's an error
-	if id.isBuiltin() || dec.wireType[id] != nil {
+	if id.isBuiltin() || dec.wireType[id.id()] != nil {
 		dec.err = errors.New("gob: duplicate type received")
 		return
 	}
@@ -71,7 +166,7 @@ func (dec *Decoder) recvType(id typeId) {
 		return
 	}
 	// Remember we've seen this type.
-	dec.wireType[id] = wire
+	dec.wireType[id.id()] = wire
 }
 
 var errBadCount = errors.New("invalid message length")
@@ -158,7 +253,7 @@ func (dec *Decoder) decodeTypeSequence(isInterface bool) typeId {
 			}
 		}
 		// Receive a type id.
-		id := typeIdId(dec.nextInt())
+		id := pureTypeId(dec.nextInt())
 		if id >= 0 {
 			// Value follows.
 			return typeId(id)
@@ -247,7 +342,7 @@ func (dec *Decoder) DecodeJson() (v any, err error) {
 	dec.err = nil
 	id := dec.decodeTypeSequence(false)
 	if dec.err == nil {
-		v = dec.decodeJsonMapValue(dec.wireType[id])
+		v = dec.decodeJsonAnyValue(id)
 	}
 	return v, dec.err
 }

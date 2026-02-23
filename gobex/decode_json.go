@@ -1,6 +1,9 @@
 package gobex
 
-import "reflect"
+import (
+	"errors"
+	"reflect"
+)
 
 func decAnyValue(kind reflect.Kind, i *decInstr, state *decoderState) any {
 	// Index by Go types.
@@ -40,30 +43,30 @@ func decAnyValue(kind reflect.Kind, i *decInstr, state *decoderState) any {
 
 // decodeSlice decodes a slice and stores it in value.
 // Slices are encoded as an unsigned length followed by the elements.
-func (dec *Decoder) decodeSliceAny(state *decoderState, elemId typeId /*, elemOp decOp, ovfl error, helper decHelper*/) []any {
+func (dec *Decoder) decodeSliceAny(state *decoderState, elemId typeId, ovfl error) []any {
 	u := state.decodeUint()
-	size := 0
 
-	if elemId.isBuiltin() {
-		bt := builtinIdToType(elemId)
-		size = bt.size()
-	} else {
+	var kind reflect.Kind
+	size := state.dec.typeSize(elemId)
 
-	}
-
-	nBytes := int(u) * size
+	nBytes := u * uint64(size)
 	n := int(u)
 	// Take care with overflow in this calculation.
-	if n < 0 || uint64(n) != u || nBytes > tooBig || (size > 0 && uint64(nBytes/size) != u) {
+	if n < 0 || uint64(n) != u || nBytes > tooBig || (size > 0 && nBytes/uint64(size) != u) {
 		// We don't check n against buffer length here because if it's a slice
 		// of interfaces, there will be buffer reloads.
 		errorf("%d slice too big: %d elements of %d bytes", elemId, u, size)
 	}
 	value := make([]any, u)
+	instr := &decInstr{nil, 0, nil, ovfl}
 	if elemId.isBuiltin() {
+		kind = dec.typeKind(elemId)
 		for i := range value {
-			_ = i
-			//value[i] = decAnyValue(reflect.String, )
+			value[i] = decAnyValue(kind, instr, state)
+		}
+	} else {
+		for i := range value {
+			value[i] = dec.decodeJsonAnyValue(elemId)
 		}
 	}
 	//dec.decodeArrayHelper(state, value, elemOp, n, ovfl, helper)
@@ -73,22 +76,40 @@ func (dec *Decoder) decodeSliceAny(state *decoderState, elemId typeId /*, elemOp
 
 // decodeJsonMapValue decodes the data stream representing a value and stores it in value.
 func (dec *Decoder) decodeJsonAnyValue(wireId typeId) any {
-	wt := dec.wireType[wireId]
+	wt := dec.wireType[wireId.id()]
 
 	if wt.StructT != nil {
-		return dec.decodeJsonMapValue(wt)
+		return dec.decodeJsonStruct(wt)
+	}
+
+	state := dec.newDecoderState(&dec.buf)
+	defer dec.freeDecoderState(state)
+	state.fieldnum = singletonField
+	if state.decodeUint() != 0 {
+		errorf("decode: corrupted data: non-zero delta for singleton")
 	}
 	if wt.ArrayT != nil || wt.SliceT != nil {
-		return dec.decodeJsonSliceValue(wt)
+		return dec.decodeJsonSlice(state, wt)
 	}
 
 	return nil
 }
 
-func (dec *Decoder) decodeJsonMapStruct(value map[string]any, fields []fieldType) {
+var errNoError error = errors.New("no error")
+
+// decodeJsonStruct decodes the data stream representing a value and stores it in value.
+func (dec *Decoder) decodeJsonStruct(wt *wireType) map[string]any {
+	if wt.StructT == nil {
+		return nil
+	}
+
+	defer catchError(&dec.err)
 	state := dec.newDecoderState(&dec.buf)
 	defer dec.freeDecoderState(state)
 	state.fieldnum = -1
+
+	value := map[string]any{}
+	fields := wt.StructT.Field
 	for state.b.Len() > 0 {
 		delta := int(state.decodeUint())
 		if delta < 0 {
@@ -111,44 +132,37 @@ func (dec *Decoder) decodeJsonMapStruct(value map[string]any, fields []fieldType
 		//	}
 		//}
 
-		fieldtype := dec.wireType[field.Id]
-		switch fieldtype.Kind() {
+		switch kind := dec.typeKind(field.Id); kind {
 		case reflect.Array:
 			//state.dec.decodeArray(state, value, *elemOp, t.Len(), ovfl, helper)
 		case reflect.Map:
 			//state.dec.decodeMap(t, state, value, *keyOp, *elemOp, ovfl)
 		case reflect.Slice:
-			//if tt := builtinIdToType(wireId); tt != nil {
-			//	elemId = tt.(*sliceType).Elem
-			//} else {
-			value[field.Name] = state.dec.decodeSliceAny(state, fieldtype.SliceT.Elem /*, *elemOp, ovfl, helper*/)
+			var elemId typeId
+			if tt := builtinIdToType(field.Id); tt != nil {
+				elemId = tt.(*sliceType).Elem
+			} else {
+				elemId = dec.wireType[field.Id.id()].SliceT.Elem
+			}
+			value[field.Name] = state.dec.decodeSliceAny(state, elemId, errNoError /*, *elemOp, ovfl, helper*/)
 		case reflect.Struct:
-			//dec.decodeStruct(*enginePtr, value)
+			value[field.Name] = dec.decodeJsonStruct(dec.wireType[field.Id.id()])
 		case reflect.Interface:
 			//state.dec.decodeInterface(t, state, value)
+		default:
+			instr := decInstr{nil, 0, nil, errNoError}
+			value[field.Name] = decAnyValue(kind, &instr, state)
 		}
 		//var field reflect.Value
 		//instr.op(instr, state, field)
 		state.fieldnum = fieldnum
 	}
-}
 
-// decodeJsonMapValue decodes the data stream representing a value and stores it in value.
-func (dec *Decoder) decodeJsonMapValue(wt *wireType) map[string]any {
-	defer catchError(&dec.err)
-
-	value := map[string]any{}
-	if st := wt.StructT; st != nil {
-		dec.decodeJsonMapStruct(value, st.Field)
-		//for _, f := range st.Field {
-		//	value[f.Name] = dec.decodeJsonAnyValue(f.Id)
-		//}
-	}
 	return value
 }
 
 // decodeJsonSliceValue decodes the data stream representing a value and stores it in value.
-func (dec *Decoder) decodeJsonSliceValue(wt *wireType) []any {
+func (dec *Decoder) decodeJsonSlice(state *decoderState, wt *wireType) []any {
 	defer catchError(&dec.err)
 
 	var value []any
@@ -156,7 +170,7 @@ func (dec *Decoder) decodeJsonSliceValue(wt *wireType) []any {
 		value = make([]any, t.Len)
 		//value[f.Name] = nil
 	} else if t := wt.SliceT; t != nil {
-		//value = make([]any, t.)
+		value = state.dec.decodeSliceAny(state, t.Elem, errors.New("no error") /*, *elemOp, ovfl, helper*/)
 	}
 
 	return value

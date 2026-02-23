@@ -9,14 +9,13 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"math/bits"
 	"os"
 	"reflect"
 	"sync"
 	"sync/atomic"
 	"unicode"
 	"unicode/utf8"
-
-	"github.com/Mishka-Squat/goex/unsafeex"
 )
 
 // userTypeInfo stores the information associated with a type the user has handed
@@ -163,31 +162,61 @@ func userType(rt reflect.Type) *userTypeInfo {
 
 // A typeId represents a gob Type as an integer that can be passed on the wire.
 // Internally, typeIds are used as keys to a map to recover the underlying type info.
-type typeIdId int32
-type typeId typeIdId
+type pureTypeId int32
+type typeId pureTypeId
 
 const (
 	invalidTypeId typeId = -1
 )
 
-func (t typeId) id() typeIdId {
-	return typeIdId(t) & (1<<(32-1-3) - 1)
+func (t typeId) id() pureTypeId {
+	return pureTypeId(t) & (1<<(32-1-3) - 1)
 }
 
+// size is stored in 8*x
 func (t typeId) size() uint32 {
-	return (uint32(t) >> (32 - 1 - 3)) & ((1 << 3) - 1)
+	bsize := (uint32(t) >> (32 - 1 - 3)) & ((1 << 3) - 1)
+	if bsize != 0 {
+		return 1 << (bsize - 1)
+	}
+
+	return 0
 }
 
 func (t typeId) setSize(size uintptr) typeId {
-	if size > 7 {
-		size = 0
+	bsize := bits.TrailingZeros(uint(size)) + 1
+	if bsize > 7 || (1<<(bsize-1)) != int(size) {
+		bsize = 0
 	}
 
-	return t | (typeId(size) << (32 - 1 - 3))
+	return t | (typeId(bsize) << (32 - 1 - 3))
 }
 
 func (t typeId) isBuiltin() bool {
 	return t.id() < firstUserId
+}
+
+func (t typeId) gobType() gobType {
+	if t.id() == 0 {
+		return nil
+	}
+	return idToType(t)
+}
+
+// string returns the string representation of the type associated with the typeId.
+func (t typeId) string() string {
+	if t.gobType() == nil {
+		return "<nil>"
+	}
+	return t.gobType().string()
+}
+
+// Name returns the name of the type associated with the typeId.
+func (t typeId) name() string {
+	if t.gobType() == nil {
+		return "<nil>"
+	}
+	return t.gobType().name()
 }
 
 var typeLock sync.Mutex // set while building a type
@@ -196,7 +225,6 @@ const firstUserId = 64  // lowest id number granted to user
 type gobType interface {
 	id() typeId
 	setId(id typeId)
-	size() int
 	name() string
 	string() string // not public; only for debugging
 	safeString(seen map[typeId]bool) string
@@ -233,29 +261,6 @@ func setTypeId(typ gobType) typeId {
 	return typ.id()
 }
 
-func (t typeId) gobType() gobType {
-	if t.id() == 0 {
-		return nil
-	}
-	return idToType(t)
-}
-
-// string returns the string representation of the type associated with the typeId.
-func (t typeId) string() string {
-	if t.gobType() == nil {
-		return "<nil>"
-	}
-	return t.gobType().string()
-}
-
-// Name returns the name of the type associated with the typeId.
-func (t typeId) name() string {
-	if t.gobType() == nil {
-		return "<nil>"
-	}
-	return t.gobType().name()
-}
-
 // CommonType holds elements of all types.
 // It is a historical artifact, kept for binary compatibility and exported
 // only for the benefit of the package's encoding of type descriptors. It is
@@ -270,23 +275,6 @@ func (t *CommonType) id() typeId { return t.Id }
 func (t *CommonType) setId(id typeId) { t.Id = id }
 
 func (t *CommonType) string() string { return t.Name }
-
-func (s *CommonType) size() int {
-	if size := s.Id.size(); size > 0 {
-		return int(size)
-	}
-
-	if s.Id.isBuiltin() {
-		switch s.Name {
-		case "string":
-			return int(unsafeex.Sizeof[string]())
-		case "interface":
-			return int(unsafeex.Sizeof[any]())
-		}
-	}
-
-	return 0
-}
 
 func (t *CommonType) safeString(seen map[typeId]bool) string {
 	return t.Name
@@ -357,10 +345,6 @@ func newArrayType(name string) *arrayType {
 	return a
 }
 
-func (s *arrayType) size() int {
-	return 0
-}
-
 func (a *arrayType) init(elem gobType, len int) {
 	// Set our type id before evaluating the element's, in case it's our own.
 	setTypeId(a)
@@ -389,10 +373,6 @@ func newGobEncoderType(name string) *gobEncoderType {
 	return g
 }
 
-func (s *gobEncoderType) size() int {
-	return 0
-}
-
 func (g *gobEncoderType) safeString(seen map[typeId]bool) string {
 	return g.Name
 }
@@ -409,10 +389,6 @@ type mapType struct {
 func newMapType(name string) *mapType {
 	m := &mapType{CommonType: CommonType{Name: name}}
 	return m
-}
-
-func (s *mapType) size() int {
-	return 0
 }
 
 func (m *mapType) init(key, elem gobType) {
@@ -453,10 +429,6 @@ func (s *sliceType) init(elemId typeId) {
 	s.Elem = elemId
 }
 
-func (s *sliceType) size() int {
-	return 0
-}
-
 func (s *sliceType) safeString(seen map[typeId]bool) string {
 	if seen[s.Id] {
 		return s.Name
@@ -484,10 +456,6 @@ func newStructType(name string) *structType {
 	// See the comment in newTypeObject for details.
 	setTypeId(s)
 	return s
-}
-
-func (s *structType) size() int {
-	return 0
 }
 
 func (s *structType) safeString(seen map[typeId]bool) string {
