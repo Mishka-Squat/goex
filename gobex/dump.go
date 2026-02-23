@@ -25,5 +25,5 @@ func main() {
 		}
 		defer file.Close()
 	}
-	//gob.Debug(file)
+	//gobex.Debug(file)
 }

@@ -6,9 +6,10 @@ package gobex_test
 
 import (
 	"bytes"
-	"encoding/gob"
 	"fmt"
 	"log"
+
+	"github.com/Mishka-Squat/goex/gobex"
 )
 
 type P struct {
@@ -27,9 +28,9 @@ func Example_basic() {
 	// Initialize the encoder and decoder. Normally enc and dec would be
 	// bound to network connections and the encoder and decoder would
 	// run in different processes.
-	var network bytes.Buffer        // Stand-in for a network connection
-	enc := gob.NewEncoder(&network) // Will write to network.
-	dec := gob.NewDecoder(&network) // Will read from network.
+	var network bytes.Buffer          // Stand-in for a network connection
+	enc := gobex.NewEncoder(&network) // Will write to network.
+	dec := gobex.NewDecoder(&network) // Will read from network.
 
 	// Encode (send) some values.
 	err := enc.Encode(P{3, 4, 5, "Pythagoras"})
