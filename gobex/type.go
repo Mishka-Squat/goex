@@ -15,6 +15,8 @@ import (
 	"sync/atomic"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/Mishka-Squat/goex/unsafeex"
 )
 
 // userTypeInfo stores the information associated with a type the user has handed
@@ -161,7 +163,32 @@ func userType(rt reflect.Type) *userTypeInfo {
 
 // A typeId represents a gob Type as an integer that can be passed on the wire.
 // Internally, typeIds are used as keys to a map to recover the underlying type info.
-type typeId int32
+type typeIdId int32
+type typeId typeIdId
+
+const (
+	invalidTypeId typeId = -1
+)
+
+func (t typeId) id() typeIdId {
+	return typeIdId(t) & (1<<(32-1-3) - 1)
+}
+
+func (t typeId) size() uint32 {
+	return (uint32(t) >> (32 - 1 - 3)) & ((1 << 3) - 1)
+}
+
+func (t typeId) setSize(size uintptr) typeId {
+	if size > 7 {
+		size = 0
+	}
+
+	return t | (typeId(size) << (32 - 1 - 3))
+}
+
+func (t typeId) isBuiltin() bool {
+	return t.id() < firstUserId
+}
 
 var typeLock sync.Mutex // set while building a type
 const firstUserId = 64  // lowest id number granted to user
@@ -169,6 +196,7 @@ const firstUserId = 64  // lowest id number granted to user
 type gobType interface {
 	id() typeId
 	setId(id typeId)
+	size() int
 	name() string
 	string() string // not public; only for debugging
 	safeString(seen map[typeId]bool) string
@@ -181,31 +209,32 @@ var (
 )
 
 func idToType(id typeId) gobType {
-	if id < 0 || int(id) >= len(idToTypeSlice) {
+	if id.id() < 0 || int(id.id()) >= len(idToTypeSlice) {
 		return nil
 	}
-	return idToTypeSlice[id]
+	return idToTypeSlice[id.id()]
 }
 
 func builtinIdToType(id typeId) gobType {
-	if id < 0 || int(id) >= len(builtinIdToTypeSlice) {
+	if id.id() < 0 || int(id.id()) >= len(builtinIdToTypeSlice) {
 		return nil
 	}
-	return builtinIdToTypeSlice[id]
+	return builtinIdToTypeSlice[id.id()]
 }
 
-func setTypeId(typ gobType) {
+func setTypeId(typ gobType) typeId {
 	// When building recursive types, someone may get there before us.
-	if typ.id() != 0 {
-		return
+	if typ.id().id() != 0 {
+		return typ.id()
 	}
 	nextId := typeId(len(idToTypeSlice))
 	typ.setId(nextId)
 	idToTypeSlice = append(idToTypeSlice, typ)
+	return typ.id()
 }
 
 func (t typeId) gobType() gobType {
-	if t == 0 {
+	if t.id() == 0 {
 		return nil
 	}
 	return idToType(t)
@@ -241,6 +270,23 @@ func (t *CommonType) id() typeId { return t.Id }
 func (t *CommonType) setId(id typeId) { t.Id = id }
 
 func (t *CommonType) string() string { return t.Name }
+
+func (s *CommonType) size() int {
+	if size := s.Id.size(); size > 0 {
+		return int(size)
+	}
+
+	if s.Id.isBuiltin() {
+		switch s.Name {
+		case "string":
+			return int(unsafeex.Sizeof[string]())
+		case "interface":
+			return int(unsafeex.Sizeof[any]())
+		}
+	}
+
+	return 0
+}
 
 func (t *CommonType) safeString(seen map[typeId]bool) string {
 	return t.Name
@@ -307,8 +353,12 @@ type arrayType struct {
 }
 
 func newArrayType(name string) *arrayType {
-	a := &arrayType{CommonType{Name: name}, 0, 0}
+	a := &arrayType{CommonType: CommonType{Name: name}}
 	return a
+}
+
+func (s *arrayType) size() int {
+	return 0
 }
 
 func (a *arrayType) init(elem gobType, len int) {
@@ -339,6 +389,10 @@ func newGobEncoderType(name string) *gobEncoderType {
 	return g
 }
 
+func (s *gobEncoderType) size() int {
+	return 0
+}
+
 func (g *gobEncoderType) safeString(seen map[typeId]bool) string {
 	return g.Name
 }
@@ -353,8 +407,12 @@ type mapType struct {
 }
 
 func newMapType(name string) *mapType {
-	m := &mapType{CommonType{Name: name}, 0, 0}
+	m := &mapType{CommonType: CommonType{Name: name}}
 	return m
+}
+
+func (s *mapType) size() int {
+	return 0
 }
 
 func (m *mapType) init(key, elem gobType) {
@@ -383,19 +441,20 @@ type sliceType struct {
 }
 
 func newSliceType(name string) *sliceType {
-	s := &sliceType{CommonType{Name: name}, 0}
+	s := &sliceType{CommonType: CommonType{Name: name}}
 	return s
 }
 
-func (s *sliceType) init(elem gobType) {
+func (s *sliceType) init(elemId typeId) {
 	// Set our type id before evaluating the element's, in case it's our own.
 	setTypeId(s)
 	// See the comments about ids in newTypeObject. Only slices and
 	// structs have mutual recursion.
-	if elem.id() == 0 {
-		setTypeId(elem)
-	}
-	s.Elem = elem.id()
+	s.Elem = elemId
+}
+
+func (s *sliceType) size() int {
+	return 0
 }
 
 func (s *sliceType) safeString(seen map[typeId]bool) string {
@@ -419,6 +478,18 @@ type structType struct {
 	Field []fieldType
 }
 
+func newStructType(name string) *structType {
+	s := &structType{CommonType{Name: name}, nil}
+	// For historical reasons we set the id here rather than init.
+	// See the comment in newTypeObject for details.
+	setTypeId(s)
+	return s
+}
+
+func (s *structType) size() int {
+	return 0
+}
+
 func (s *structType) safeString(seen map[typeId]bool) string {
 	if s == nil {
 		return "<nil>"
@@ -436,14 +507,6 @@ func (s *structType) safeString(seen map[typeId]bool) string {
 }
 
 func (s *structType) string() string { return s.safeString(make(map[typeId]bool)) }
-
-func newStructType(name string) *structType {
-	s := &structType{CommonType{Name: name}, nil}
-	// For historical reasons we set the id here rather than init.
-	// See the comment in newTypeObject for details.
-	setTypeId(s)
-	return s
-}
 
 // newTypeObject allocates a gobType for the reflection type rt.
 // Unless ut represents a GobEncoder, rt should be the base type
@@ -520,23 +583,26 @@ func newTypeObject(name string, ut *userTypeInfo, rt reflect.Type) (gobType, err
 		return mt, nil
 
 	case reflect.Slice:
+		t_elem := t.Elem()
 		// []byte == []uint8 is a special case
-		if t.Elem().Kind() == reflect.Uint8 {
+		if t_elem.Kind() == reflect.Uint8 {
 			return tBytes.gobType(), nil
 		}
 		st := newSliceType(name)
 		types[rt] = st
-		type0, err = getBaseType(t.Elem().Name(), t.Elem())
+		type0, err = getBaseType(t_elem.Name(), t_elem)
 		if err != nil {
 			return nil, err
 		}
-		st.init(type0)
+
+		type0id := setTypeId(type0).setSize(t_elem.Size())
+		st.init(type0id)
 		return st, nil
 
 	case reflect.Struct:
 		st := newStructType(name)
 		types[rt] = st
-		idToTypeSlice[st.id()] = st
+		idToTypeSlice[st.id().id()] = st
 		for i := 0; i < t.NumField(); i++ {
 			f := t.Field(i)
 			if !isSent(&f) {
@@ -556,10 +622,10 @@ func newTypeObject(name string, ut *userTypeInfo, rt reflect.Type) (gobType, err
 			// still defining the element. Fix the element type id here.
 			// We could do this more neatly by setting the id at the start of
 			// building every type, but that would break binary compatibility.
-			if gt.id() == 0 {
-				setTypeId(gt)
-			}
-			st.Field = append(st.Field, fieldType{f.Name, gt.id()})
+			st.Field = append(st.Field, fieldType{
+				Name: f.Name,
+				Id:   setTypeId(gt).setSize(f.Type.Size()),
+			})
 		}
 		return st, nil
 
@@ -636,7 +702,7 @@ func bootstrapType(name string, e any) typeId {
 	typ := &CommonType{Name: name}
 	types[rt] = typ
 	setTypeId(typ)
-	return typ.id()
+	return typ.id().setSize(0)
 }
 
 // Representation of the information we send and receive about this type.
@@ -682,6 +748,30 @@ func (w *wireType) string() string {
 		return w.TextMarshalerT.Name
 	}
 	return unknown
+}
+
+func (w *wireType) Kind() reflect.Kind {
+	if w == nil {
+		return reflect.Invalid
+	}
+	switch {
+	case w.ArrayT != nil:
+		return reflect.Array
+	case w.SliceT != nil:
+		return reflect.Slice
+	case w.StructT != nil:
+		return reflect.Struct
+	case w.MapT != nil:
+		return reflect.Map
+	case w.GobEncoderT != nil:
+		return reflect.Invalid
+	case w.BinaryMarshalerT != nil:
+		return reflect.Invalid
+	case w.TextMarshalerT != nil:
+		return reflect.Invalid
+	}
+
+	return reflect.Invalid
 }
 
 type typeInfo struct {

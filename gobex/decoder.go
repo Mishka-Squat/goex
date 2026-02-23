@@ -59,7 +59,7 @@ func NewDecoder(r io.Reader) *Decoder {
 // recvType loads the definition of a type.
 func (dec *Decoder) recvType(id typeId) {
 	// Have we already seen this type? That's an error
-	if id < firstUserId || dec.wireType[id] != nil {
+	if id.isBuiltin() || dec.wireType[id] != nil {
 		dec.err = errors.New("gob: duplicate type received")
 		return
 	}
@@ -158,13 +158,13 @@ func (dec *Decoder) decodeTypeSequence(isInterface bool) typeId {
 			}
 		}
 		// Receive a type id.
-		id := typeId(dec.nextInt())
+		id := typeIdId(dec.nextInt())
 		if id >= 0 {
 			// Value follows.
-			return id
+			return typeId(id)
 		}
 		// Type definition for (-id) follows.
-		dec.recvType(-id)
+		dec.recvType(typeId(-id))
 		if dec.err != nil {
 			break
 		}
@@ -181,7 +181,7 @@ func (dec *Decoder) decodeTypeSequence(isInterface bool) typeId {
 		}
 		firstMessage = false
 	}
-	return -1
+	return invalidTypeId
 }
 
 // Decode reads the next value from the input stream and stores
@@ -230,6 +230,26 @@ func (dec *Decoder) DecodeValue(v reflect.Value) error {
 		dec.decodeValue(id, v)
 	}
 	return dec.err
+}
+
+// DecodeValue reads the next value from the input stream.
+// If v is the zero reflect.Value (v.Kind() == Invalid), DecodeValue discards the value.
+// Otherwise, it stores the value into v. In that case, v must represent
+// a non-nil pointer to data or be an assignable reflect.Value (v.CanSet())
+// If the input is at EOF, DecodeValue returns [io.EOF] and
+// does not modify v.
+func (dec *Decoder) DecodeJson() (v any, err error) {
+	// Make sure we're single-threaded through here.
+	dec.mutex.Lock()
+	defer dec.mutex.Unlock()
+
+	dec.buf.Reset() // In case data lingers from previous invocation.
+	dec.err = nil
+	id := dec.decodeTypeSequence(false)
+	if dec.err == nil {
+		v = dec.decodeJsonMapValue(dec.wireType[id])
+	}
+	return v, dec.err
 }
 
 // If debug.go is compiled into the program, debugFunc prints a human-readable
