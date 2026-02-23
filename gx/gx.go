@@ -5,6 +5,10 @@ func IsNil[T comparable](v T) bool {
 	return v == n
 }
 
+func Ok(e error) bool {
+	return e == nil
+}
+
 func Check[T any](v T, e error) (T, bool) {
 	return v, e == nil
 }

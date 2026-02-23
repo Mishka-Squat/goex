@@ -3,11 +3,13 @@ package gobex
 import (
 	"io"
 	"unsafe"
+
+	"github.com/Mishka-Squat/goex/slicesex"
 )
 
 // chunk is an arbitrary limit on how much memory we are willing
 // to allocate without concern.
-const chunk = 10 << 20 // 10M
+const chunk = 1 << 20 // 1M
 
 // ReadData reads n bytes from the input stream, but avoids allocating
 // all n bytes if n is large. This avoids crashing the program by
@@ -16,7 +18,7 @@ const chunk = 10 << 20 // 10M
 // The error is io.EOF only if no bytes were read.
 // If an io.EOF happens after reading some but not all the bytes,
 // ReadData returns io.ErrUnexpectedEOF.
-func saferio_ReadData(r io.Reader, n uint64) ([]byte, error) {
+func saferio_ReadData(buf []byte, r io.Reader, n uint64) ([]byte, error) {
 	if int64(n) < 0 || n != uint64(int(n)) {
 		// n is too large to fit in int, so we can't allocate
 		// a buffer large enough. Treat this as a read failure.
@@ -24,7 +26,7 @@ func saferio_ReadData(r io.Reader, n uint64) ([]byte, error) {
 	}
 
 	if n < chunk {
-		buf := make([]byte, n)
+		buf = slicesex.Reserve(buf, int(n))[0:n]
 		_, err := io.ReadFull(r, buf)
 		if err != nil {
 			return nil, err
@@ -32,21 +34,21 @@ func saferio_ReadData(r io.Reader, n uint64) ([]byte, error) {
 		return buf, nil
 	}
 
-	var buf []byte
-	buf1 := make([]byte, chunk)
+	buf = buf[0:0]
+	var chunkBuffer = make([]byte, chunk)
 	for n > 0 {
 		next := n
 		if next > chunk {
 			next = chunk
 		}
-		_, err := io.ReadFull(r, buf1[:next])
+		_, err := io.ReadFull(r, chunkBuffer[:next])
 		if err != nil {
 			if len(buf) > 0 && err == io.EOF {
 				err = io.ErrUnexpectedEOF
 			}
 			return nil, err
 		}
-		buf = append(buf, buf1[:next]...)
+		buf = append(buf, chunkBuffer[:next]...)
 		n -= next
 	}
 	return buf, nil

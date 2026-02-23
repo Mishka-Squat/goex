@@ -7,9 +7,13 @@
 package gobex
 
 import (
+	"fmt"
 	"math"
 	"reflect"
 )
+
+var errCanAddr = fmt.Errorf("not addressable")
+var errWrongType = fmt.Errorf("wrong type")
 
 var decArrayHelper = map[reflect.Kind]decHelper{
 	reflect.Bool:       decBoolArray,
@@ -49,19 +53,19 @@ var decSliceHelper = map[reflect.Kind]decHelper{
 	reflect.Uintptr:    decUintptrSlice,
 }
 
-func decBoolArray(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decBoolArray(state *decoderState, v reflect.Value, length int) error {
 	// Can only slice if it is addressable.
 	if !v.CanAddr() {
-		return false
+		return errCanAddr
 	}
-	return decBoolSlice(state, v.Slice(0, v.Len()), length, ovfl)
+	return decBoolSlice(state, v.Slice(0, v.Len()), length)
 }
 
-func decBoolSlice(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decBoolSlice(state *decoderState, v reflect.Value, length int) error {
 	slice, ok := reflect.TypeAssert[[]bool](v)
 	if !ok {
 		// It is kind bool but not type bool. TODO: We can handle this unsafely.
-		return false
+		return errWrongType
 	}
 	for i := 0; i < length; i++ {
 		if state.b.Len() == 0 {
@@ -73,22 +77,22 @@ func decBoolSlice(state *decoderState, v reflect.Value, length int, ovfl error) 
 		}
 		slice[i] = state.decodeUint() != 0
 	}
-	return true
+	return nil
 }
 
-func decComplex64Array(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decComplex64Array(state *decoderState, v reflect.Value, length int) error {
 	// Can only slice if it is addressable.
 	if !v.CanAddr() {
-		return false
+		return errCanAddr
 	}
-	return decComplex64Slice(state, v.Slice(0, v.Len()), length, ovfl)
+	return decComplex64Slice(state, v.Slice(0, v.Len()), length)
 }
 
-func decComplex64Slice(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decComplex64Slice(state *decoderState, v reflect.Value, length int) error {
 	slice, ok := reflect.TypeAssert[[]complex64](v)
 	if !ok {
 		// It is kind complex64 but not type complex64. TODO: We can handle this unsafely.
-		return false
+		return errWrongType
 	}
 	for i := 0; i < length; i++ {
 		if state.b.Len() == 0 {
@@ -98,26 +102,32 @@ func decComplex64Slice(state *decoderState, v reflect.Value, length int, ovfl er
 			// This is a slice that we only partially allocated.
 			growSlice(v, &slice, length)
 		}
-		real := float32FromBits(state.decodeUint(), ovfl)
-		imag := float32FromBits(state.decodeUint(), ovfl)
+		real, err := float32FromBits(state.decodeUint())
+		if err != nil {
+			return err
+		}
+		imag, err := float32FromBits(state.decodeUint())
+		if err != nil {
+			return err
+		}
 		slice[i] = complex(float32(real), float32(imag))
 	}
-	return true
+	return nil
 }
 
-func decComplex128Array(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decComplex128Array(state *decoderState, v reflect.Value, length int) error {
 	// Can only slice if it is addressable.
 	if !v.CanAddr() {
-		return false
+		return errCanAddr
 	}
-	return decComplex128Slice(state, v.Slice(0, v.Len()), length, ovfl)
+	return decComplex128Slice(state, v.Slice(0, v.Len()), length)
 }
 
-func decComplex128Slice(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decComplex128Slice(state *decoderState, v reflect.Value, length int) error {
 	slice, ok := reflect.TypeAssert[[]complex128](v)
 	if !ok {
 		// It is kind complex128 but not type complex128. TODO: We can handle this unsafely.
-		return false
+		return errWrongType
 	}
 	for i := 0; i < length; i++ {
 		if state.b.Len() == 0 {
@@ -127,26 +137,32 @@ func decComplex128Slice(state *decoderState, v reflect.Value, length int, ovfl e
 			// This is a slice that we only partially allocated.
 			growSlice(v, &slice, length)
 		}
-		real := float64FromBits(state.decodeUint())
-		imag := float64FromBits(state.decodeUint())
+		real, err := float64FromBits(state.decodeUint())
+		if err != nil {
+			return err
+		}
+		imag, err := float64FromBits(state.decodeUint())
+		if err != nil {
+			return err
+		}
 		slice[i] = complex(real, imag)
 	}
-	return true
+	return nil
 }
 
-func decFloat32Array(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decFloat32Array(state *decoderState, v reflect.Value, length int) error {
 	// Can only slice if it is addressable.
 	if !v.CanAddr() {
-		return false
+		return errCanAddr
 	}
-	return decFloat32Slice(state, v.Slice(0, v.Len()), length, ovfl)
+	return decFloat32Slice(state, v.Slice(0, v.Len()), length)
 }
 
-func decFloat32Slice(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decFloat32Slice(state *decoderState, v reflect.Value, length int) error {
 	slice, ok := reflect.TypeAssert[[]float32](v)
 	if !ok {
 		// It is kind float32 but not type float32. TODO: We can handle this unsafely.
-		return false
+		return errWrongType
 	}
 	for i := 0; i < length; i++ {
 		if state.b.Len() == 0 {
@@ -156,24 +172,28 @@ func decFloat32Slice(state *decoderState, v reflect.Value, length int, ovfl erro
 			// This is a slice that we only partially allocated.
 			growSlice(v, &slice, length)
 		}
-		slice[i] = float32(float32FromBits(state.decodeUint(), ovfl))
+		v, err := float32FromBits(state.decodeUint())
+		if err != nil {
+			return err
+		}
+		slice[i] = float32(v)
 	}
-	return true
+	return nil
 }
 
-func decFloat64Array(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decFloat64Array(state *decoderState, v reflect.Value, length int) error {
 	// Can only slice if it is addressable.
 	if !v.CanAddr() {
-		return false
+		return errCanAddr
 	}
-	return decFloat64Slice(state, v.Slice(0, v.Len()), length, ovfl)
+	return decFloat64Slice(state, v.Slice(0, v.Len()), length)
 }
 
-func decFloat64Slice(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decFloat64Slice(state *decoderState, v reflect.Value, length int) error {
 	slice, ok := reflect.TypeAssert[[]float64](v)
 	if !ok {
 		// It is kind float64 but not type float64. TODO: We can handle this unsafely.
-		return false
+		return errWrongType
 	}
 	for i := 0; i < length; i++ {
 		if state.b.Len() == 0 {
@@ -183,24 +203,28 @@ func decFloat64Slice(state *decoderState, v reflect.Value, length int, ovfl erro
 			// This is a slice that we only partially allocated.
 			growSlice(v, &slice, length)
 		}
-		slice[i] = float64FromBits(state.decodeUint())
+		v, err := float64FromBits(state.decodeUint())
+		if err != nil {
+			return err
+		}
+		slice[i] = v
 	}
-	return true
+	return nil
 }
 
-func decIntArray(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decIntArray(state *decoderState, v reflect.Value, length int) error {
 	// Can only slice if it is addressable.
 	if !v.CanAddr() {
-		return false
+		return errCanAddr
 	}
-	return decIntSlice(state, v.Slice(0, v.Len()), length, ovfl)
+	return decIntSlice(state, v.Slice(0, v.Len()), length)
 }
 
-func decIntSlice(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decIntSlice(state *decoderState, v reflect.Value, length int) error {
 	slice, ok := reflect.TypeAssert[[]int](v)
 	if !ok {
 		// It is kind int but not type int. TODO: We can handle this unsafely.
-		return false
+		return errWrongType
 	}
 	for i := 0; i < length; i++ {
 		if state.b.Len() == 0 {
@@ -213,26 +237,26 @@ func decIntSlice(state *decoderState, v reflect.Value, length int, ovfl error) b
 		x := state.decodeInt()
 		// MinInt and MaxInt
 		if x < ^int64(^uint(0)>>1) || int64(^uint(0)>>1) < x {
-			error_(ovfl)
+			return errOverflow
 		}
 		slice[i] = int(x)
 	}
-	return true
+	return nil
 }
 
-func decInt16Array(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decInt16Array(state *decoderState, v reflect.Value, length int) error {
 	// Can only slice if it is addressable.
 	if !v.CanAddr() {
-		return false
+		return errCanAddr
 	}
-	return decInt16Slice(state, v.Slice(0, v.Len()), length, ovfl)
+	return decInt16Slice(state, v.Slice(0, v.Len()), length)
 }
 
-func decInt16Slice(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decInt16Slice(state *decoderState, v reflect.Value, length int) error {
 	slice, ok := reflect.TypeAssert[[]int16](v)
 	if !ok {
 		// It is kind int16 but not type int16. TODO: We can handle this unsafely.
-		return false
+		return errWrongType
 	}
 	for i := 0; i < length; i++ {
 		if state.b.Len() == 0 {
@@ -244,26 +268,26 @@ func decInt16Slice(state *decoderState, v reflect.Value, length int, ovfl error)
 		}
 		x := state.decodeInt()
 		if x < math.MinInt16 || math.MaxInt16 < x {
-			error_(ovfl)
+			return errOverflow
 		}
 		slice[i] = int16(x)
 	}
-	return true
+	return nil
 }
 
-func decInt32Array(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decInt32Array(state *decoderState, v reflect.Value, length int) error {
 	// Can only slice if it is addressable.
 	if !v.CanAddr() {
-		return false
+		return errCanAddr
 	}
-	return decInt32Slice(state, v.Slice(0, v.Len()), length, ovfl)
+	return decInt32Slice(state, v.Slice(0, v.Len()), length)
 }
 
-func decInt32Slice(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decInt32Slice(state *decoderState, v reflect.Value, length int) error {
 	slice, ok := reflect.TypeAssert[[]int32](v)
 	if !ok {
 		// It is kind int32 but not type int32. TODO: We can handle this unsafely.
-		return false
+		return errWrongType
 	}
 	for i := 0; i < length; i++ {
 		if state.b.Len() == 0 {
@@ -275,26 +299,26 @@ func decInt32Slice(state *decoderState, v reflect.Value, length int, ovfl error)
 		}
 		x := state.decodeInt()
 		if x < math.MinInt32 || math.MaxInt32 < x {
-			error_(ovfl)
+			return errOverflow
 		}
 		slice[i] = int32(x)
 	}
-	return true
+	return nil
 }
 
-func decInt64Array(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decInt64Array(state *decoderState, v reflect.Value, length int) error {
 	// Can only slice if it is addressable.
 	if !v.CanAddr() {
-		return false
+		return errCanAddr
 	}
-	return decInt64Slice(state, v.Slice(0, v.Len()), length, ovfl)
+	return decInt64Slice(state, v.Slice(0, v.Len()), length)
 }
 
-func decInt64Slice(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decInt64Slice(state *decoderState, v reflect.Value, length int) error {
 	slice, ok := reflect.TypeAssert[[]int64](v)
 	if !ok {
 		// It is kind int64 but not type int64. TODO: We can handle this unsafely.
-		return false
+		return errWrongType
 	}
 	for i := 0; i < length; i++ {
 		if state.b.Len() == 0 {
@@ -306,22 +330,22 @@ func decInt64Slice(state *decoderState, v reflect.Value, length int, ovfl error)
 		}
 		slice[i] = state.decodeInt()
 	}
-	return true
+	return nil
 }
 
-func decInt8Array(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decInt8Array(state *decoderState, v reflect.Value, length int) error {
 	// Can only slice if it is addressable.
 	if !v.CanAddr() {
-		return false
+		return errCanAddr
 	}
-	return decInt8Slice(state, v.Slice(0, v.Len()), length, ovfl)
+	return decInt8Slice(state, v.Slice(0, v.Len()), length)
 }
 
-func decInt8Slice(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decInt8Slice(state *decoderState, v reflect.Value, length int) error {
 	slice, ok := reflect.TypeAssert[[]int8](v)
 	if !ok {
 		// It is kind int8 but not type int8. TODO: We can handle this unsafely.
-		return false
+		return errWrongType
 	}
 	for i := 0; i < length; i++ {
 		if state.b.Len() == 0 {
@@ -333,26 +357,26 @@ func decInt8Slice(state *decoderState, v reflect.Value, length int, ovfl error) 
 		}
 		x := state.decodeInt()
 		if x < math.MinInt8 || math.MaxInt8 < x {
-			error_(ovfl)
+			return errOverflow
 		}
 		slice[i] = int8(x)
 	}
-	return true
+	return nil
 }
 
-func decStringArray(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decStringArray(state *decoderState, v reflect.Value, length int) error {
 	// Can only slice if it is addressable.
 	if !v.CanAddr() {
-		return false
+		return errCanAddr
 	}
-	return decStringSlice(state, v.Slice(0, v.Len()), length, ovfl)
+	return decStringSlice(state, v.Slice(0, v.Len()), length)
 }
 
-func decStringSlice(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decStringSlice(state *decoderState, v reflect.Value, length int) error {
 	slice, ok := reflect.TypeAssert[[]string](v)
 	if !ok {
 		// It is kind string but not type string. TODO: We can handle this unsafely.
-		return false
+		return errWrongType
 	}
 	for i := 0; i < length; i++ {
 		if state.b.Len() == 0 {
@@ -378,22 +402,22 @@ func decStringSlice(state *decoderState, v reflect.Value, length int, ovfl error
 		slice[i] = string(data[:n])
 		state.b.Drop(n)
 	}
-	return true
+	return nil
 }
 
-func decUintArray(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decUintArray(state *decoderState, v reflect.Value, length int) error {
 	// Can only slice if it is addressable.
 	if !v.CanAddr() {
-		return false
+		return errCanAddr
 	}
-	return decUintSlice(state, v.Slice(0, v.Len()), length, ovfl)
+	return decUintSlice(state, v.Slice(0, v.Len()), length)
 }
 
-func decUintSlice(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decUintSlice(state *decoderState, v reflect.Value, length int) error {
 	slice, ok := reflect.TypeAssert[[]uint](v)
 	if !ok {
 		// It is kind uint but not type uint. TODO: We can handle this unsafely.
-		return false
+		return errWrongType
 	}
 	for i := 0; i < length; i++ {
 		if state.b.Len() == 0 {
@@ -405,26 +429,26 @@ func decUintSlice(state *decoderState, v reflect.Value, length int, ovfl error) 
 		}
 		x := state.decodeUint()
 		/*TODO if math.MaxUint32 < x {
-			error_(ovfl)
+			return errOverflow
 		}*/
 		slice[i] = uint(x)
 	}
-	return true
+	return nil
 }
 
-func decUint16Array(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decUint16Array(state *decoderState, v reflect.Value, length int) error {
 	// Can only slice if it is addressable.
 	if !v.CanAddr() {
-		return false
+		return errCanAddr
 	}
-	return decUint16Slice(state, v.Slice(0, v.Len()), length, ovfl)
+	return decUint16Slice(state, v.Slice(0, v.Len()), length)
 }
 
-func decUint16Slice(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decUint16Slice(state *decoderState, v reflect.Value, length int) error {
 	slice, ok := reflect.TypeAssert[[]uint16](v)
 	if !ok {
 		// It is kind uint16 but not type uint16. TODO: We can handle this unsafely.
-		return false
+		return errWrongType
 	}
 	for i := 0; i < length; i++ {
 		if state.b.Len() == 0 {
@@ -436,26 +460,26 @@ func decUint16Slice(state *decoderState, v reflect.Value, length int, ovfl error
 		}
 		x := state.decodeUint()
 		if math.MaxUint16 < x {
-			error_(ovfl)
+			return errOverflow
 		}
 		slice[i] = uint16(x)
 	}
-	return true
+	return nil
 }
 
-func decUint32Array(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decUint32Array(state *decoderState, v reflect.Value, length int) error {
 	// Can only slice if it is addressable.
 	if !v.CanAddr() {
-		return false
+		return errCanAddr
 	}
-	return decUint32Slice(state, v.Slice(0, v.Len()), length, ovfl)
+	return decUint32Slice(state, v.Slice(0, v.Len()), length)
 }
 
-func decUint32Slice(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decUint32Slice(state *decoderState, v reflect.Value, length int) error {
 	slice, ok := reflect.TypeAssert[[]uint32](v)
 	if !ok {
 		// It is kind uint32 but not type uint32. TODO: We can handle this unsafely.
-		return false
+		return errWrongType
 	}
 	for i := 0; i < length; i++ {
 		if state.b.Len() == 0 {
@@ -467,26 +491,26 @@ func decUint32Slice(state *decoderState, v reflect.Value, length int, ovfl error
 		}
 		x := state.decodeUint()
 		if math.MaxUint32 < x {
-			error_(ovfl)
+			return errOverflow
 		}
 		slice[i] = uint32(x)
 	}
-	return true
+	return nil
 }
 
-func decUint64Array(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decUint64Array(state *decoderState, v reflect.Value, length int) error {
 	// Can only slice if it is addressable.
 	if !v.CanAddr() {
-		return false
+		return errCanAddr
 	}
-	return decUint64Slice(state, v.Slice(0, v.Len()), length, ovfl)
+	return decUint64Slice(state, v.Slice(0, v.Len()), length)
 }
 
-func decUint64Slice(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decUint64Slice(state *decoderState, v reflect.Value, length int) error {
 	slice, ok := reflect.TypeAssert[[]uint64](v)
 	if !ok {
 		// It is kind uint64 but not type uint64. TODO: We can handle this unsafely.
-		return false
+		return errWrongType
 	}
 	for i := 0; i < length; i++ {
 		if state.b.Len() == 0 {
@@ -498,22 +522,22 @@ func decUint64Slice(state *decoderState, v reflect.Value, length int, ovfl error
 		}
 		slice[i] = state.decodeUint()
 	}
-	return true
+	return nil
 }
 
-func decUintptrArray(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decUintptrArray(state *decoderState, v reflect.Value, length int) error {
 	// Can only slice if it is addressable.
 	if !v.CanAddr() {
-		return false
+		return errCanAddr
 	}
-	return decUintptrSlice(state, v.Slice(0, v.Len()), length, ovfl)
+	return decUintptrSlice(state, v.Slice(0, v.Len()), length)
 }
 
-func decUintptrSlice(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func decUintptrSlice(state *decoderState, v reflect.Value, length int) error {
 	slice, ok := reflect.TypeAssert[[]uintptr](v)
 	if !ok {
 		// It is kind uintptr but not type uintptr. TODO: We can handle this unsafely.
-		return false
+		return errWrongType
 	}
 	for i := 0; i < length; i++ {
 		if state.b.Len() == 0 {
@@ -525,11 +549,11 @@ func decUintptrSlice(state *decoderState, v reflect.Value, length int, ovfl erro
 		}
 		x := state.decodeUint()
 		if uint64(^uintptr(0)) < x {
-			error_(ovfl)
+			return errOverflow
 		}
 		slice[i] = uintptr(x)
 	}
-	return true
+	return nil
 }
 
 // growSlice is called for a slice that we only partially allocated,

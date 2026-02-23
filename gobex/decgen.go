@@ -37,26 +37,34 @@ var types = []Type{
 	{
 		"complex64",
 		"Complex64",
-		`real := float32FromBits(state.decodeUint(), ovfl)
-		imag := float32FromBits(state.decodeUint(), ovfl)
+		`real, err := float32FromBits(state.decodeUint())
+		if err != nil { return err }
+		imag, err := float32FromBits(state.decodeUint())
+		if err != nil { return err }
 		slice[i] = complex(float32(real), float32(imag))`,
 	},
 	{
 		"complex128",
 		"Complex128",
-		`real := float64FromBits(state.decodeUint())
-		imag := float64FromBits(state.decodeUint())
+		`real, err := float64FromBits(state.decodeUint())
+		if err != nil { return err }
+		imag, err := float64FromBits(state.decodeUint())
+		if err != nil { return err }
 		slice[i] = complex(real, imag)`,
 	},
 	{
 		"float32",
 		"Float32",
-		`slice[i] = float32(float32FromBits(state.decodeUint(), ovfl))`,
+		`v, err := float32FromBits(state.decodeUint())
+		if err != nil { return err }
+		slice[i] = float32(v)`,
 	},
 	{
 		"float64",
 		"Float64",
-		`slice[i] = float64FromBits(state.decodeUint())`,
+		`v, err := float64FromBits(state.decodeUint())
+		if err != nil { return err }
+		slice[i] = v`,
 	},
 	{
 		"int",
@@ -64,7 +72,7 @@ var types = []Type{
 		`x := state.decodeInt()
 		// MinInt and MaxInt
 		if x < ^int64(^uint(0)>>1) || int64(^uint(0)>>1) < x {
-			error_(ovfl)
+			return errOverflow
 		}
 		slice[i] = int(x)`,
 	},
@@ -73,7 +81,7 @@ var types = []Type{
 		"Int16",
 		`x := state.decodeInt()
 		if x < math.MinInt16 || math.MaxInt16 < x {
-			error_(ovfl)
+			return errOverflow
 		}
 		slice[i] = int16(x)`,
 	},
@@ -82,7 +90,7 @@ var types = []Type{
 		"Int32",
 		`x := state.decodeInt()
 		if x < math.MinInt32 || math.MaxInt32 < x {
-			error_(ovfl)
+			return errOverflow
 		}
 		slice[i] = int32(x)`,
 	},
@@ -96,7 +104,7 @@ var types = []Type{
 		"Int8",
 		`x := state.decodeInt()
 		if x < math.MinInt8 || math.MaxInt8 < x {
-			error_(ovfl)
+			return errOverflow
 		}
 		slice[i] = int8(x)`,
 	},
@@ -124,7 +132,7 @@ var types = []Type{
 		"Uint",
 		`x := state.decodeUint()
 		/*TODO if math.MaxUint32 < x {
-			error_(ovfl)
+			return errOverflow
 		}*/
 		slice[i] = uint(x)`,
 	},
@@ -133,7 +141,7 @@ var types = []Type{
 		"Uint16",
 		`x := state.decodeUint()
 		if math.MaxUint16 < x {
-			error_(ovfl)
+			return errOverflow
 		}
 		slice[i] = uint16(x)`,
 	},
@@ -142,7 +150,7 @@ var types = []Type{
 		"Uint32",
 		`x := state.decodeUint()
 		if math.MaxUint32 < x {
-			error_(ovfl)
+			return errOverflow
 		}
 		slice[i] = uint32(x)`,
 	},
@@ -156,7 +164,7 @@ var types = []Type{
 		"Uintptr",
 		`x := state.decodeUint()
 		if uint64(^uintptr(0)) < x {
-			error_(ovfl)
+			return errOverflow
 		}
 		slice[i] = uintptr(x)`,
 	},
@@ -213,28 +221,32 @@ const header = `
 package gobex
 
 import (
+	"fmt"
 	"math"
 	"reflect"
 )
 
+var errCanAddr = fmt.Errorf("not addressable")
+var errWrongType = fmt.Errorf("wrong type")
+
 `
 
 const arrayHelper = `
-func dec%[2]sArray(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func dec%[2]sArray(state *decoderState, v reflect.Value, length int) error {
 	// Can only slice if it is addressable.
 	if !v.CanAddr() {
-		return false
+		return errCanAddr
 	}
-	return dec%[2]sSlice(state, v.Slice(0, v.Len()), length, ovfl)
+	return dec%[2]sSlice(state, v.Slice(0, v.Len()), length)
 }
 `
 
 const sliceHelper = `
-func dec%[2]sSlice(state *decoderState, v reflect.Value, length int, ovfl error) bool {
+func dec%[2]sSlice(state *decoderState, v reflect.Value, length int) error {
 	slice, ok := reflect.TypeAssert[[]%[1]s](v)
 	if !ok {
 		// It is kind %[1]s but not type %[1]s. TODO: We can handle this unsafely.
-		return false
+		return errWrongType
 	}
 	for i := 0; i < length; i++ {
 		if state.b.Len() == 0 {
@@ -246,7 +258,7 @@ func dec%[2]sSlice(state *decoderState, v reflect.Value, length int, ovfl error)
 		}
 		%[3]s
 	}
-	return true
+	return nil
 }
 `
 

@@ -195,9 +195,8 @@ func (dec *Decoder) readMessage(nbytes int) {
 		panic("non-empty decoder buffer")
 	}
 	// Read the data
-	var buf []byte
-	buf, dec.err = saferio_ReadData(dec.r, uint64(nbytes))
-	dec.buf.SetBytes(buf)
+	dec.buf.data, dec.err = saferio_ReadData(dec.buf.data, dec.r, uint64(nbytes))
+	dec.buf.offset = 0
 	if dec.err == io.EOF {
 		dec.err = io.ErrUnexpectedEOF
 	}

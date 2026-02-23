@@ -3,39 +3,41 @@ package gobex
 import (
 	"errors"
 	"reflect"
+
+	"github.com/Mishka-Squat/goex/gx"
 )
 
-func decAnyValue(kind reflect.Kind, i *decInstr, state *decoderState) any {
+func decAnyValue(kind reflect.Kind, state *decoderState) any {
 	// Index by Go types.
 	switch kind {
 	case reflect.Bool:
-		return decBoolValue(i, state)
+		return gx.Must(decBoolValue(state))
 	case reflect.Int8:
-		return decInt8Value(i, state)
+		return gx.Must(decInt8Value(state))
 	case reflect.Int16:
-		return decInt16Value(i, state)
+		return gx.Must(decInt16Value(state))
 	case reflect.Int32:
-		return decInt32Value(i, state)
+		return gx.Must(decInt32Value(state))
 	case reflect.Int64:
-		return decInt64Value(i, state)
+		return gx.Must(decInt64Value(state))
 	case reflect.Uint8:
-		return decUint8Value(i, state)
+		return gx.Must(decUint8Value(state))
 	case reflect.Uint16:
-		return decUint16Value(i, state)
+		return gx.Must(decUint16Value(state))
 	case reflect.Uint32:
-		return decUint32Value(i, state)
+		return gx.Must(decUint32Value(state))
 	case reflect.Uint64:
-		return decUint64Value(i, state)
+		return gx.Must(decUint64Value(state))
 	case reflect.Float32:
-		return decFloat32Value(i, state)
+		return gx.Must(decFloat32Value(state))
 	case reflect.Float64:
-		return decFloat64Value(i, state)
+		return gx.Must(decFloat64Value(state))
 	case reflect.Complex64:
-		return decComplex64Value(i, state)
+		return gx.Must(decComplex64Value(state))
 	case reflect.Complex128:
-		return decComplex128Value(i, state)
+		return gx.Must(decComplex128Value(state))
 	case reflect.String:
-		return decStringValue(i, state)
+		return decStringValue(state)
 	}
 
 	return nil
@@ -43,7 +45,7 @@ func decAnyValue(kind reflect.Kind, i *decInstr, state *decoderState) any {
 
 // decodeSlice decodes a slice and stores it in value.
 // Slices are encoded as an unsigned length followed by the elements.
-func (dec *Decoder) decodeSliceAny(state *decoderState, elemId typeId, ovfl error) []any {
+func (dec *Decoder) decodeSliceAny(state *decoderState, elemId typeId) []any {
 	u := state.decodeUint()
 
 	var kind reflect.Kind
@@ -58,11 +60,10 @@ func (dec *Decoder) decodeSliceAny(state *decoderState, elemId typeId, ovfl erro
 		errorf("%d slice too big: %d elements of %d bytes", elemId, u, size)
 	}
 	value := make([]any, u)
-	instr := &decInstr{nil, 0, nil, ovfl}
 	if elemId.isBuiltin() {
 		kind = dec.typeKind(elemId)
 		for i := range value {
-			value[i] = decAnyValue(kind, instr, state)
+			value[i] = decAnyValue(kind, state)
 		}
 	} else {
 		for i := range value {
@@ -144,14 +145,13 @@ func (dec *Decoder) decodeJsonStruct(wt *wireType) map[string]any {
 			} else {
 				elemId = dec.wireType[field.Id.id()].SliceT.Elem
 			}
-			value[field.Name] = state.dec.decodeSliceAny(state, elemId, errNoError /*, *elemOp, ovfl, helper*/)
+			value[field.Name] = state.dec.decodeSliceAny(state, elemId /*, *elemOp, ovfl, helper*/)
 		case reflect.Struct:
 			value[field.Name] = dec.decodeJsonStruct(dec.wireType[field.Id.id()])
 		case reflect.Interface:
 			//state.dec.decodeInterface(t, state, value)
 		default:
-			instr := decInstr{nil, 0, nil, errNoError}
-			value[field.Name] = decAnyValue(kind, &instr, state)
+			value[field.Name] = decAnyValue(kind, state)
 		}
 		//var field reflect.Value
 		//instr.op(instr, state, field)
@@ -170,7 +170,7 @@ func (dec *Decoder) decodeJsonSlice(state *decoderState, wt *wireType) []any {
 		value = make([]any, t.Len)
 		//value[f.Name] = nil
 	} else if t := wt.SliceT; t != nil {
-		value = state.dec.decodeSliceAny(state, t.Elem, errors.New("no error") /*, *elemOp, ovfl, helper*/)
+		value = state.dec.decodeSliceAny(state, t.Elem /*, *elemOp, ovfl, helper*/)
 	}
 
 	return value

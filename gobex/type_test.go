@@ -171,8 +171,8 @@ func TestRegistrationNaming(t *testing.T) {
 		t    any
 		name string
 	}{
-		{&N1{}, "*gob.N1"},
-		{N2{}, "encoding/gob.N2"},
+		{&N1{}, "*gobex.N1"},
+		{N2{}, "github.com/Mishka-Squat/goex/gobex.N2"},
 	}
 
 	for _, tc := range testCases {

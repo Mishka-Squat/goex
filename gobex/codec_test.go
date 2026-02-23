@@ -6,7 +6,6 @@ package gobex
 
 import (
 	"bytes"
-	"errors"
 	"flag"
 	"math"
 	"math/rand"
@@ -327,7 +326,7 @@ func execDec(instr *decInstr, state *decoderState, t *testing.T, value reflect.V
 	if v+state.fieldnum != 6 {
 		t.Fatalf("decoding field number %d, got %d", 6, v+state.fieldnum)
 	}
-	instr.op(instr, state, value.Elem())
+	instr.op(state, value.Elem())
 	state.fieldnum = 6
 }
 
@@ -341,12 +340,10 @@ func newDecodeStateFromData(data []byte) *decoderState {
 // Test instruction execution for decoding.
 // Do not run the machine yet; instead do individual instructions crafted by hand.
 func TestScalarDecInstructions(t *testing.T) {
-	ovfl := errors.New("overflow")
-
 	// bool
 	{
 		var data bool
-		instr := &decInstr{decBool, 6, nil, ovfl}
+		instr := &decInstr{decBool, 6, nil}
 		state := newDecodeStateFromData(boolResult)
 		execDec(instr, state, t, reflect.ValueOf(&data))
 		if data != true {
@@ -356,7 +353,7 @@ func TestScalarDecInstructions(t *testing.T) {
 	// int
 	{
 		var data int
-		instr := &decInstr{decOpTable[reflect.Int], 6, nil, ovfl}
+		instr := &decInstr{decOpTable[reflect.Int], 6, nil}
 		state := newDecodeStateFromData(signedResult)
 		execDec(instr, state, t, reflect.ValueOf(&data))
 		if data != 17 {
@@ -367,7 +364,7 @@ func TestScalarDecInstructions(t *testing.T) {
 	// uint
 	{
 		var data uint
-		instr := &decInstr{decOpTable[reflect.Uint], 6, nil, ovfl}
+		instr := &decInstr{decOpTable[reflect.Uint], 6, nil}
 		state := newDecodeStateFromData(unsignedResult)
 		execDec(instr, state, t, reflect.ValueOf(&data))
 		if data != 17 {
@@ -378,7 +375,7 @@ func TestScalarDecInstructions(t *testing.T) {
 	// int8
 	{
 		var data int8
-		instr := &decInstr{decInt8, 6, nil, ovfl}
+		instr := &decInstr{decInt8, 6, nil}
 		state := newDecodeStateFromData(signedResult)
 		execDec(instr, state, t, reflect.ValueOf(&data))
 		if data != 17 {
@@ -389,7 +386,7 @@ func TestScalarDecInstructions(t *testing.T) {
 	// uint8
 	{
 		var data uint8
-		instr := &decInstr{decUint8, 6, nil, ovfl}
+		instr := &decInstr{decUint8, 6, nil}
 		state := newDecodeStateFromData(unsignedResult)
 		execDec(instr, state, t, reflect.ValueOf(&data))
 		if data != 17 {
@@ -400,7 +397,7 @@ func TestScalarDecInstructions(t *testing.T) {
 	// int16
 	{
 		var data int16
-		instr := &decInstr{decInt16, 6, nil, ovfl}
+		instr := &decInstr{decInt16, 6, nil}
 		state := newDecodeStateFromData(signedResult)
 		execDec(instr, state, t, reflect.ValueOf(&data))
 		if data != 17 {
@@ -411,7 +408,7 @@ func TestScalarDecInstructions(t *testing.T) {
 	// uint16
 	{
 		var data uint16
-		instr := &decInstr{decUint16, 6, nil, ovfl}
+		instr := &decInstr{decUint16, 6, nil}
 		state := newDecodeStateFromData(unsignedResult)
 		execDec(instr, state, t, reflect.ValueOf(&data))
 		if data != 17 {
@@ -422,7 +419,7 @@ func TestScalarDecInstructions(t *testing.T) {
 	// int32
 	{
 		var data int32
-		instr := &decInstr{decInt32, 6, nil, ovfl}
+		instr := &decInstr{decInt32, 6, nil}
 		state := newDecodeStateFromData(signedResult)
 		execDec(instr, state, t, reflect.ValueOf(&data))
 		if data != 17 {
@@ -433,7 +430,7 @@ func TestScalarDecInstructions(t *testing.T) {
 	// uint32
 	{
 		var data uint32
-		instr := &decInstr{decUint32, 6, nil, ovfl}
+		instr := &decInstr{decUint32, 6, nil}
 		state := newDecodeStateFromData(unsignedResult)
 		execDec(instr, state, t, reflect.ValueOf(&data))
 		if data != 17 {
@@ -444,7 +441,7 @@ func TestScalarDecInstructions(t *testing.T) {
 	// uintptr
 	{
 		var data uintptr
-		instr := &decInstr{decOpTable[reflect.Uintptr], 6, nil, ovfl}
+		instr := &decInstr{decOpTable[reflect.Uintptr], 6, nil}
 		state := newDecodeStateFromData(unsignedResult)
 		execDec(instr, state, t, reflect.ValueOf(&data))
 		if data != 17 {
@@ -455,7 +452,7 @@ func TestScalarDecInstructions(t *testing.T) {
 	// int64
 	{
 		var data int64
-		instr := &decInstr{decInt64, 6, nil, ovfl}
+		instr := &decInstr{decInt64, 6, nil}
 		state := newDecodeStateFromData(signedResult)
 		execDec(instr, state, t, reflect.ValueOf(&data))
 		if data != 17 {
@@ -466,7 +463,7 @@ func TestScalarDecInstructions(t *testing.T) {
 	// uint64
 	{
 		var data uint64
-		instr := &decInstr{decUint64, 6, nil, ovfl}
+		instr := &decInstr{decUint64, 6, nil}
 		state := newDecodeStateFromData(unsignedResult)
 		execDec(instr, state, t, reflect.ValueOf(&data))
 		if data != 17 {
@@ -477,7 +474,7 @@ func TestScalarDecInstructions(t *testing.T) {
 	// float32
 	{
 		var data float32
-		instr := &decInstr{decFloat32, 6, nil, ovfl}
+		instr := &decInstr{decFloat32, 6, nil}
 		state := newDecodeStateFromData(floatResult)
 		execDec(instr, state, t, reflect.ValueOf(&data))
 		if data != 17 {
@@ -488,7 +485,7 @@ func TestScalarDecInstructions(t *testing.T) {
 	// float64
 	{
 		var data float64
-		instr := &decInstr{decFloat64, 6, nil, ovfl}
+		instr := &decInstr{decFloat64, 6, nil}
 		state := newDecodeStateFromData(floatResult)
 		execDec(instr, state, t, reflect.ValueOf(&data))
 		if data != 17 {
@@ -499,7 +496,7 @@ func TestScalarDecInstructions(t *testing.T) {
 	// complex64
 	{
 		var data complex64
-		instr := &decInstr{decOpTable[reflect.Complex64], 6, nil, ovfl}
+		instr := &decInstr{decOpTable[reflect.Complex64], 6, nil}
 		state := newDecodeStateFromData(complexResult)
 		execDec(instr, state, t, reflect.ValueOf(&data))
 		if data != 17+19i {
@@ -510,7 +507,7 @@ func TestScalarDecInstructions(t *testing.T) {
 	// complex128
 	{
 		var data complex128
-		instr := &decInstr{decOpTable[reflect.Complex128], 6, nil, ovfl}
+		instr := &decInstr{decOpTable[reflect.Complex128], 6, nil}
 		state := newDecodeStateFromData(complexResult)
 		execDec(instr, state, t, reflect.ValueOf(&data))
 		if data != 17+19i {
@@ -521,7 +518,7 @@ func TestScalarDecInstructions(t *testing.T) {
 	// bytes == []uint8
 	{
 		var data []byte
-		instr := &decInstr{decUint8Slice, 6, nil, ovfl}
+		instr := &decInstr{decUint8Slice, 6, nil}
 		state := newDecodeStateFromData(bytesResult)
 		execDec(instr, state, t, reflect.ValueOf(&data))
 		if string(data) != "hello" {
@@ -532,7 +529,7 @@ func TestScalarDecInstructions(t *testing.T) {
 	// string
 	{
 		var data string
-		instr := &decInstr{decString, 6, nil, ovfl}
+		instr := &decInstr{decString, 6, nil}
 		state := newDecodeStateFromData(bytesResult)
 		execDec(instr, state, t, reflect.ValueOf(&data))
 		if data != "hello" {
