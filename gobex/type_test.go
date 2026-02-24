@@ -20,7 +20,7 @@ var basicTypes = []typeT{
 	{tBool, "bool"},
 	{tInt, "int"},
 	{tUint, "uint"},
-	{tFloat, "float"},
+	{tFloat32, "float32"},
 	{tBytes, "bytes"},
 	{tString, "string"},
 }
@@ -148,7 +148,7 @@ func TestStructType(t *testing.T) {
 	sstruct := getTypeUnlocked("Foo", reflect.TypeFor[Foo]())
 	str := sstruct.string()
 	// If we can print it correctly, we built it correctly.
-	expected := "Foo = struct { A int; B int; C string; D bytes; E float; F float; G Bar = struct { X string; }; H Bar; I Foo; }"
+	expected := "Foo = struct { A int; B int32; C string; D bytes; E float64; F float64; G Bar = struct { X string; }; H Bar; I Foo; }"
 	if str != expected {
 		t.Errorf("struct printed as %q; expected %q", str, expected)
 	}

@@ -541,7 +541,7 @@ func (engine *decEngine) compileSingle(dec *Decoder, remoteId typeId, ut *userTy
 	if !dec.compatibleType(rt, remoteId, make(map[reflect.Type]typeId)) {
 		remoteType := dec.typeString(remoteId)
 		// Common confusing case: local interface type, remote concrete type.
-		if ut.base.Kind() == reflect.Interface && remoteId.id() != tInterface.id() {
+		if ut.base.Kind() == reflect.Interface && remoteId != tInterface {
 			return errors.New("gob: local interface type " + name + " can only be decoded from remote interface type; received concrete type " + remoteType)
 		}
 		return errors.New("gob: decoding into local type " + name + ", received remote type " + remoteType)
@@ -575,7 +575,7 @@ func (engine *decEngine) compileDec(dec *Decoder, remoteId typeId, ut *userTypeI
 	if t := builtinIdToType(remoteId); t != nil {
 		wireStruct, _ = t.(*structType)
 	} else {
-		wire := dec.wireType[remoteId.id()]
+		wire := dec.wireType[remoteId]
 		if wire == nil {
 			error_(errBadType)
 		}
@@ -860,7 +860,7 @@ func (dec *Decoder) decodeInterface(ityp reflect.Type, state *decoderState, valu
 
 	// Read the type id of the concrete value.
 	concreteId := dec.decodeTypeSequence(true)
-	if concreteId.id() < 0 {
+	if concreteId < 0 {
 		error_(dec.err)
 	}
 	// Byte count of value is next; we don't care what it is (it's there
@@ -894,7 +894,7 @@ func (dec *Decoder) ignoreInterface(state *decoderState) {
 	}
 	state.b.Drop(n)
 	id := dec.decodeTypeSequence(true)
-	if id.id() < 0 {
+	if id < 0 {
 		error_(dec.err)
 	}
 	// At this point, the decoder buffer contains a delimited value. Just toss it.
@@ -970,14 +970,24 @@ var decOpTable = [...]decOp{
 }
 
 // Indexed by gob types.  tComplex will be added during type.init().
-var decIgnoreOpMap = map[pureTypeId]decOp{
-	tBool.id():    ignoreUint,
-	tInt.id():     ignoreUint,
-	tUint.id():    ignoreUint,
-	tFloat.id():   ignoreUint,
-	tBytes.id():   ignoreUint8Array,
-	tString.id():  ignoreUint8Array,
-	tComplex.id(): ignoreTwoUints,
+var decIgnoreOpMap = map[typeId]decOp{
+	tBool:       ignoreUint,
+	tInt:        ignoreUint,
+	tInt8:       ignoreUint,
+	tInt16:      ignoreUint,
+	tInt32:      ignoreUint,
+	tInt64:      ignoreUint,
+	tUint:       ignoreUint,
+	tUint8:      ignoreUint,
+	tUint16:     ignoreUint,
+	tUint32:     ignoreUint,
+	tUint64:     ignoreUint,
+	tFloat32:    ignoreUint,
+	tFloat64:    ignoreUint,
+	tComplex64:  ignoreTwoUints,
+	tComplex128: ignoreTwoUints,
+	tBytes:      ignoreUint8Array,
+	tString:     ignoreUint8Array,
 }
 
 // decOpFor returns the decoding op for the base type under rt and
@@ -1006,7 +1016,7 @@ func (dec *Decoder) decOpFor(wireId typeId, rt reflect.Type, name string, inProg
 		switch t := typ; t.Kind() {
 		case reflect.Array:
 			name = "element of " + name
-			elemId := dec.wireType[wireId.id()].ArrayT.Elem
+			elemId := dec.wireType[wireId].ArrayT.Elem
 			elemOp := dec.decOpFor(elemId, t.Elem(), name, inProgress)
 			helper := decArrayHelper[t.Elem().Kind()]
 			op = func(state *decoderState, value reflect.Value) {
@@ -1014,8 +1024,8 @@ func (dec *Decoder) decOpFor(wireId typeId, rt reflect.Type, name string, inProg
 			}
 
 		case reflect.Map:
-			keyId := dec.wireType[wireId.id()].MapT.Key
-			elemId := dec.wireType[wireId.id()].MapT.Elem
+			keyId := dec.wireType[wireId].MapT.Key
+			elemId := dec.wireType[wireId].MapT.Elem
 			keyOp := dec.decOpFor(keyId, t.Key(), "key of "+name, inProgress)
 			elemOp := dec.decOpFor(elemId, t.Elem(), "element of "+name, inProgress)
 			op = func(state *decoderState, value reflect.Value) {
@@ -1032,7 +1042,7 @@ func (dec *Decoder) decOpFor(wireId typeId, rt reflect.Type, name string, inProg
 			if tt := builtinIdToType(wireId); tt != nil {
 				elemId = tt.(*sliceType).Elem
 			} else {
-				elemId = dec.wireType[wireId.id()].SliceT.Elem
+				elemId = dec.wireType[wireId].SliceT.Elem
 			}
 			elemOp := dec.decOpFor(elemId, t.Elem(), name, inProgress)
 			helper := decSliceHelper[t.Elem().Kind()]
@@ -1078,10 +1088,10 @@ func (dec *Decoder) decIgnoreOpFor(wireId typeId, inProgress map[typeId]*decOp) 
 	if opPtr := inProgress[wireId]; opPtr != nil {
 		return opPtr
 	}
-	op, ok := decIgnoreOpMap[wireId.id()]
+	op, ok := decIgnoreOpMap[wireId]
 	if !ok {
 		inProgress[wireId] = &op
-		if wireId.id() == tInterface.id() {
+		if wireId == tInterface {
 			// Special case because it's a method: the ignored item might
 			// define types and we need to record their state in the decoder.
 			op = func(state *decoderState, value reflect.Value) {
@@ -1090,7 +1100,7 @@ func (dec *Decoder) decIgnoreOpFor(wireId typeId, inProgress map[typeId]*decOp) 
 			return &op
 		}
 		// Special cases
-		wire := dec.wireType[wireId.id()]
+		wire := dec.wireType[wireId]
 		switch {
 		case wire == nil:
 			errorf("bad data: undefined type %s", wireId.string())
@@ -1102,8 +1112,8 @@ func (dec *Decoder) decIgnoreOpFor(wireId typeId, inProgress map[typeId]*decOp) 
 			}
 
 		case wire.MapT != nil:
-			keyId := dec.wireType[wireId.id()].MapT.Key
-			elemId := dec.wireType[wireId.id()].MapT.Elem
+			keyId := dec.wireType[wireId].MapT.Key
+			elemId := dec.wireType[wireId].MapT.Elem
 			keyOp := dec.decIgnoreOpFor(keyId, inProgress)
 			elemOp := dec.decIgnoreOpFor(elemId, inProgress)
 			op = func(state *decoderState, value reflect.Value) {
@@ -1168,11 +1178,11 @@ func (dec *Decoder) gobDecodeOpFor(ut *userTypeInfo) *decOp {
 // Structs are considered ok; fields will be checked later.
 func (dec *Decoder) compatibleType(fr reflect.Type, fw typeId, inProgress map[reflect.Type]typeId) bool {
 	if rhs, ok := inProgress[fr]; ok {
-		return rhs.id() == fw.id()
+		return rhs == fw
 	}
 	inProgress[fr] = fw
 	ut := userType(fr)
-	wire, ok := dec.wireType[fw.id()]
+	wire, ok := dec.wireType[fw]
 	// If wire was encoded with an encoding method, fr must have that method.
 	// And if not, it must not.
 	// At most one of the booleans in ut is set.
@@ -1192,19 +1202,79 @@ func (dec *Decoder) compatibleType(fr reflect.Type, fw typeId, inProgress map[re
 		// chan, etc: cannot handle.
 		return false
 	case reflect.Bool:
-		return fw.id() == tBool.id()
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return fw.id() == tInt.id()
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return fw.id() == tUint.id()
-	case reflect.Float32, reflect.Float64:
-		return fw.id() == tFloat.id()
-	case reflect.Complex64, reflect.Complex128:
-		return fw.id() == tComplex.id()
+		return fw == tBool
+	case reflect.Int:
+		if fw == tInt {
+			return true
+		}
+		if bits.UintSize == 64 {
+			return fw == tInt64
+		} else {
+			return fw == tInt32
+		}
+	case reflect.Int8:
+		return fw == tInt8
+	case reflect.Int16:
+		return fw == tInt16
+	case reflect.Int32:
+		if fw == tInt32 {
+			return true
+		}
+		if bits.UintSize != 64 {
+			return fw == tInt
+		}
+		return false
+	case reflect.Int64:
+		if fw == tInt64 {
+			return true
+		}
+		if bits.UintSize == 64 {
+			return fw == tInt
+		}
+		return false
+	case reflect.Uint:
+		if fw == tUint {
+			return true
+		}
+		if bits.UintSize == 64 {
+			return fw == tUint64
+		} else {
+			return fw == tUint32
+		}
+	case reflect.Uint8:
+		return fw == tUint8
+	case reflect.Uint16:
+		return fw == tUint16
+	case reflect.Uint32:
+		if fw == tUint32 {
+			return true
+		}
+		if bits.UintSize != 64 {
+			return fw == tUint
+		}
+		return false
+	case reflect.Uint64:
+		if fw == tUint64 {
+			return true
+		}
+		if bits.UintSize == 64 {
+			return fw == tUint
+		}
+		return false
+	case reflect.Uintptr:
+		return fw == tUintptr
+	case reflect.Float32:
+		return fw == tFloat32
+	case reflect.Float64:
+		return fw == tFloat64
+	case reflect.Complex64:
+		return fw == tComplex64
+	case reflect.Complex128:
+		return fw == tComplex128
 	case reflect.String:
-		return fw.id() == tString.id()
+		return fw == tString
 	case reflect.Interface:
-		return fw.id() == tInterface.id()
+		return fw == tInterface
 	case reflect.Array:
 		if !ok || wire.ArrayT == nil {
 			return false
@@ -1220,7 +1290,7 @@ func (dec *Decoder) compatibleType(fr reflect.Type, fw typeId, inProgress map[re
 	case reflect.Slice:
 		// Is it an array of bytes?
 		if t.Elem().Kind() == reflect.Uint8 {
-			return fw.id() == tBytes.id()
+			return fw == tBytes
 		}
 		// Extract and compare element types.
 		var sw *sliceType
@@ -1244,7 +1314,7 @@ func (dec *Decoder) typeString(remoteId typeId) string {
 		// globally known type.
 		return t.string()
 	}
-	return dec.wireType[remoteId.id()].string()
+	return dec.wireType[remoteId].string()
 }
 
 // getDecEnginePtr returns the engine for the specified type.
@@ -1279,7 +1349,7 @@ func (dec *Decoder) getIgnoreEnginePtr(wireId typeId) (engine *decEngine, err er
 		// To handle recursive types, mark this engine as underway before compiling.
 		engine = new(decEngine)
 		dec.ignorerCache[wireId] = engine
-		wire := dec.wireType[wireId.id()]
+		wire := dec.wireType[wireId]
 		if wire != nil && wire.StructT != nil {
 			err = engine.compileDec(dec, wireId, userType(emptyStructType))
 		} else {
@@ -1310,7 +1380,7 @@ func (dec *Decoder) decodeValue(wireId typeId, value reflect.Value) {
 	}
 	value = decAlloc(value)
 	if st := base; st.Kind() == reflect.Struct && ut.externalDec == 0 {
-		wt := dec.wireType[wireId.id()]
+		wt := dec.wireType[wireId]
 		if engine.numInstr == 0 && st.NumField() > 0 &&
 			wt != nil && len(wt.StructT.Field) > 0 {
 			name := base.Name()
@@ -1329,7 +1399,7 @@ func (dec *Decoder) decodeIgnoredValue(wireId typeId) {
 	if dec.err != nil {
 		return
 	}
-	wire := dec.wireType[wireId.id()]
+	wire := dec.wireType[wireId]
 	if wire != nil && wire.StructT != nil {
 		dec.ignoreStruct(engine)
 	} else {

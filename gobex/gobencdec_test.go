@@ -786,7 +786,7 @@ func TestGobEncodePtrError(t *testing.T) {
 
 func TestNetIP(t *testing.T) {
 	// Encoding of net.IP{1,2,3,4} in Go 1.1.
-	enc := []byte{0x07, 0x0a, 0x00, 0x04, 0x01, 0x02, 0x03, 0x04}
+	enc := []byte{0x07, 0x22, 0x00, 0x04, 0x01, 0x02, 0x03, 0x04}
 
 	var ip net.IP
 	err := NewDecoder(bytes.NewReader(enc)).Decode(&ip)

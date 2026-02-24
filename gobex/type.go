@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"math/bits"
 	"os"
 	"reflect"
 	"sync"
@@ -162,42 +161,18 @@ func userType(rt reflect.Type) *userTypeInfo {
 
 // A typeId represents a gob Type as an integer that can be passed on the wire.
 // Internally, typeIds are used as keys to a map to recover the underlying type info.
-type pureTypeId int32
-type typeId pureTypeId
+type typeId int32
 
 const (
 	invalidTypeId typeId = -1
 )
 
-func (t typeId) id() pureTypeId {
-	return pureTypeId(t) & (1<<(32-1-3) - 1)
-}
-
-// size is stored in 8*x
-func (t typeId) size() uint32 {
-	bsize := (uint32(t) >> (32 - 1 - 3)) & ((1 << 3) - 1)
-	if bsize != 0 {
-		return 1 << (bsize - 1)
-	}
-
-	return 0
-}
-
-func (t typeId) setSize(size uintptr) typeId {
-	bsize := bits.TrailingZeros(uint(size)) + 1
-	if bsize > 7 || (1<<(bsize-1)) != int(size) {
-		bsize = 0
-	}
-
-	return t | (typeId(bsize) << (32 - 1 - 3))
-}
-
 func (t typeId) isBuiltin() bool {
-	return t.id() < firstUserId
+	return t < firstUserId
 }
 
 func (t typeId) gobType() gobType {
-	if t.id() == 0 {
+	if t == 0 {
 		return nil
 	}
 	return idToType(t)
@@ -237,22 +212,22 @@ var (
 )
 
 func idToType(id typeId) gobType {
-	if id.id() < 0 || int(id.id()) >= len(idToTypeSlice) {
+	if id < 0 || int(id) >= len(idToTypeSlice) {
 		return nil
 	}
-	return idToTypeSlice[id.id()]
+	return idToTypeSlice[id]
 }
 
 func builtinIdToType(id typeId) gobType {
-	if id.id() < 0 || int(id.id()) >= len(builtinIdToTypeSlice) {
+	if id < 0 || int(id) >= len(builtinIdToTypeSlice) {
 		return nil
 	}
-	return builtinIdToTypeSlice[id.id()]
+	return builtinIdToTypeSlice[id]
 }
 
 func setTypeId(typ gobType) typeId {
 	// When building recursive types, someone may get there before us.
-	if typ.id().id() != 0 {
+	if typ.id() != 0 {
 		return typ.id()
 	}
 	nextId := typeId(len(idToTypeSlice))
@@ -268,6 +243,8 @@ func setTypeId(typ gobType) typeId {
 type CommonType struct {
 	Name string
 	Id   typeId
+	Size uint32
+	Kind reflect.Kind
 }
 
 func (t *CommonType) id() typeId { return t.Id }
@@ -289,14 +266,25 @@ var (
 	// Primordial types, needed during initialization.
 	// Always passed as pointers so the interface{} type
 	// goes through without losing its interfaceness.
-	tBool      = bootstrapType("bool", (*bool)(nil))
-	tInt       = bootstrapType("int", (*int)(nil))
-	tUint      = bootstrapType("uint", (*uint)(nil))
-	tFloat     = bootstrapType("float", (*float64)(nil))
-	tBytes     = bootstrapType("bytes", (*[]byte)(nil))
-	tString    = bootstrapType("string", (*string)(nil))
-	tComplex   = bootstrapType("complex", (*complex128)(nil))
-	tInterface = bootstrapType("interface", (*any)(nil))
+	tBool       = bootstrapType("bool", (*bool)(nil))
+	tInt        = bootstrapType("int", (*int)(nil))
+	tInt8       = bootstrapType("int8", (*int8)(nil))
+	tInt16      = bootstrapType("int16", (*int16)(nil))
+	tInt32      = bootstrapType("int32", (*int32)(nil))
+	tInt64      = bootstrapType("int64", (*int64)(nil))
+	tUint       = bootstrapType("uint", (*uint)(nil))
+	tUint8      = bootstrapType("uint8", (*uint8)(nil))
+	tUint16     = bootstrapType("uint16", (*uint16)(nil))
+	tUint32     = bootstrapType("uint32", (*uint32)(nil))
+	tUint64     = bootstrapType("uint64", (*uint64)(nil))
+	tUintptr    = bootstrapType("uintptr", (*uintptr)(nil))
+	tFloat32    = bootstrapType("float32", (*float32)(nil))
+	tFloat64    = bootstrapType("float64", (*float64)(nil))
+	tComplex64  = bootstrapType("complex64", (*complex64)(nil))
+	tComplex128 = bootstrapType("complex128", (*complex128)(nil))
+	tBytes      = bootstrapType("bytes", (*[]byte)(nil))
+	tString     = bootstrapType("string", (*string)(nil))
+	tInterface  = bootstrapType("interface", (*any)(nil))
 	// Reserve some Ids for compatible expansion
 	tReserved7 = bootstrapType("_reserved1", (*struct{ r7 int })(nil))
 	tReserved6 = bootstrapType("_reserved1", (*struct{ r6 int })(nil))
@@ -313,13 +301,13 @@ var wireTypeUserInfo *userTypeInfo // userTypeInfo of wireType
 
 func init() {
 	// Some magic numbers to make sure there are no surprises.
-	checkId(16, tWireType)
-	checkId(17, mustGetTypeInfo(reflect.TypeFor[arrayType]()).id)
-	checkId(18, mustGetTypeInfo(reflect.TypeFor[CommonType]()).id)
-	checkId(19, mustGetTypeInfo(reflect.TypeFor[sliceType]()).id)
-	checkId(20, mustGetTypeInfo(reflect.TypeFor[structType]()).id)
-	checkId(21, mustGetTypeInfo(reflect.TypeFor[fieldType]()).id)
-	checkId(23, mustGetTypeInfo(reflect.TypeFor[mapType]()).id)
+	checkId(27, tWireType)
+	checkId(28, mustGetTypeInfo(reflect.TypeFor[arrayType]()).id)
+	checkId(29, mustGetTypeInfo(reflect.TypeFor[CommonType]()).id)
+	checkId(30, mustGetTypeInfo(reflect.TypeFor[sliceType]()).id)
+	checkId(31, mustGetTypeInfo(reflect.TypeFor[structType]()).id)
+	checkId(32, mustGetTypeInfo(reflect.TypeFor[fieldType]()).id)
+	checkId(34, mustGetTypeInfo(reflect.TypeFor[mapType]()).id)
 
 	copy(builtinIdToTypeSlice[:], idToTypeSlice)
 
@@ -500,17 +488,39 @@ func newTypeObject(name string, ut *userTypeInfo, rt reflect.Type) (gobType, err
 	case reflect.Bool:
 		return tBool.gobType(), nil
 
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+	case reflect.Int:
 		return tInt.gobType(), nil
+	case reflect.Int8:
+		return tInt8.gobType(), nil
+	case reflect.Int16:
+		return tInt16.gobType(), nil
+	case reflect.Int32:
+		return tInt32.gobType(), nil
+	case reflect.Int64:
+		return tInt64.gobType(), nil
 
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+	case reflect.Uint:
 		return tUint.gobType(), nil
+	case reflect.Uint8:
+		return tUint8.gobType(), nil
+	case reflect.Uint16:
+		return tUint16.gobType(), nil
+	case reflect.Uint32:
+		return tUint32.gobType(), nil
+	case reflect.Uint64:
+		return tUint64.gobType(), nil
+	case reflect.Uintptr:
+		return tUintptr.gobType(), nil
 
-	case reflect.Float32, reflect.Float64:
-		return tFloat.gobType(), nil
+	case reflect.Float32:
+		return tFloat32.gobType(), nil
+	case reflect.Float64:
+		return tFloat64.gobType(), nil
 
-	case reflect.Complex64, reflect.Complex128:
-		return tComplex.gobType(), nil
+	case reflect.Complex64:
+		return tComplex64.gobType(), nil
+	case reflect.Complex128:
+		return tComplex128.gobType(), nil
 
 	case reflect.String:
 		return tString.gobType(), nil
@@ -563,14 +573,13 @@ func newTypeObject(name string, ut *userTypeInfo, rt reflect.Type) (gobType, err
 			return nil, err
 		}
 
-		type0id := setTypeId(type0).setSize(t_elem.Size())
-		st.init(type0id)
+		st.init(setTypeId(type0))
 		return st, nil
 
 	case reflect.Struct:
 		st := newStructType(name)
 		types[rt] = st
-		idToTypeSlice[st.id().id()] = st
+		idToTypeSlice[st.id()] = st
 		for i := 0; i < t.NumField(); i++ {
 			f := t.Field(i)
 			if !isSent(&f) {
@@ -592,7 +601,7 @@ func newTypeObject(name string, ut *userTypeInfo, rt reflect.Type) (gobType, err
 			// building every type, but that would break binary compatibility.
 			st.Field = append(st.Field, fieldType{
 				Name: f.Name,
-				Id:   setTypeId(gt).setSize(f.Type.Size()),
+				Id:   setTypeId(gt),
 			})
 		}
 		return st, nil
@@ -667,10 +676,14 @@ func bootstrapType(name string, e any) typeId {
 	if present {
 		panic("bootstrap type already present: " + name + ", " + rt.String())
 	}
-	typ := &CommonType{Name: name}
+	typ := &CommonType{
+		Name: name,
+		Size: uint32(rt.Size()),
+		Kind: rt.Kind(),
+	}
 	types[rt] = typ
 	setTypeId(typ)
-	return typ.id().setSize(0)
+	return typ.id()
 }
 
 // Representation of the information we send and receive about this type.

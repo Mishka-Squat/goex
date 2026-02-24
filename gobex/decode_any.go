@@ -75,10 +75,10 @@ func (dec *Decoder) decodeSliceAny(state *decoderState, elemId typeId) []any {
 
 // decodeJsonMapValue decodes the data stream representing a value and stores it in value.
 func (dec *Decoder) decodeJsonAnyValue(wireId typeId) any {
-	wt := dec.wireType[wireId.id()]
+	wt := dec.wireType[wireId]
 
 	if wt.StructT != nil {
-		return dec.decodeJsonStruct(wt)
+		return dec.decodeAnyStruct(wt)
 	}
 
 	state := dec.newDecoderState(&dec.buf)
@@ -87,7 +87,7 @@ func (dec *Decoder) decodeJsonAnyValue(wireId typeId) any {
 		errorf("decode: corrupted data: non-zero delta for singleton")
 	}
 	if wt.ArrayT != nil || wt.SliceT != nil {
-		return dec.decodeJsonSlice(&state, wt)
+		return dec.decodeAnySlice(&state, wt)
 	}
 
 	return nil
@@ -95,8 +95,8 @@ func (dec *Decoder) decodeJsonAnyValue(wireId typeId) any {
 
 var errNoError error = errors.New("no error")
 
-// decodeJsonStruct decodes the data stream representing a value and stores it in value.
-func (dec *Decoder) decodeJsonStruct(wt *wireType) map[string]any {
+// decodeAnyStruct decodes the data stream representing a value and stores it in value.
+func (dec *Decoder) decodeAnyStruct(wt *wireType) map[string]any {
 	if wt.StructT == nil {
 		return nil
 	}
@@ -139,11 +139,11 @@ func (dec *Decoder) decodeJsonStruct(wt *wireType) map[string]any {
 			if tt := builtinIdToType(field.Id); tt != nil {
 				elemId = tt.(*sliceType).Elem
 			} else {
-				elemId = dec.wireType[field.Id.id()].SliceT.Elem
+				elemId = dec.wireType[field.Id].SliceT.Elem
 			}
 			value[field.Name] = state.dec.decodeSliceAny(&state, elemId /*, *elemOp, ovfl, helper*/)
 		case reflect.Struct:
-			value[field.Name] = dec.decodeJsonStruct(dec.wireType[field.Id.id()])
+			value[field.Name] = dec.decodeAnyStruct(dec.wireType[field.Id])
 		case reflect.Interface:
 			//state.dec.decodeInterface(t, state, value)
 		default:
@@ -158,7 +158,7 @@ func (dec *Decoder) decodeJsonStruct(wt *wireType) map[string]any {
 }
 
 // decodeJsonSliceValue decodes the data stream representing a value and stores it in value.
-func (dec *Decoder) decodeJsonSlice(state *decoderState, wt *wireType) []any {
+func (dec *Decoder) decodeAnySlice(state *decoderState, wt *wireType) []any {
 	defer catchError(&dec.err)
 
 	var value []any
@@ -166,7 +166,7 @@ func (dec *Decoder) decodeJsonSlice(state *decoderState, wt *wireType) []any {
 		value = make([]any, t.Len)
 		//value[f.Name] = nil
 	} else if t := wt.SliceT; t != nil {
-		value = state.dec.decodeSliceAny(state, t.Elem /*, *elemOp, ovfl, helper*/)
+		value = state.dec.decodeSliceAny(state, t.Elem)
 	}
 
 	return value
