@@ -8,14 +8,13 @@ import (
 	"errors"
 	"io"
 	"reflect"
-	"sync"
 )
 
 // An Encoder manages the transmission of type and data information to the
 // other side of a connection.  It is safe for concurrent use by multiple
 // goroutines.
 type Encoder struct {
-	mutex      sync.Mutex              // each item must be sent atomically
+	//mutex      sync.Mutex              // each item must be sent atomically
 	w          []io.Writer             // where to send the data
 	sent       map[reflect.Type]typeId // which types we've already sent
 	countState *encoderState           // stage for writing counts
@@ -37,6 +36,16 @@ func NewEncoder(w io.Writer) *Encoder {
 	enc.sent = make(map[reflect.Type]typeId)
 	enc.countState = enc.newEncoderState(new(encBuffer))
 	return enc
+}
+
+func (enc *Encoder) Make() {
+	enc.w = []io.Writer{io.Discard}
+	enc.sent = make(map[reflect.Type]typeId)
+	enc.countState = enc.newEncoderState(new(encBuffer))
+}
+
+func (enc *Encoder) SetWriter(w io.Writer) {
+	enc.w[0] = w
 }
 
 // writer returns the innermost writer the encoder is using.
@@ -225,8 +234,9 @@ func (enc *Encoder) EncodeValue(value reflect.Value) error {
 
 	// Make sure we're single-threaded through here, so multiple
 	// goroutines can share an encoder.
-	enc.mutex.Lock()
-	defer enc.mutex.Unlock()
+	// DOC(iga): that should be guaranteed by user
+	//enc.mutex.Lock()
+	//defer enc.mutex.Unlock()
 
 	// Remove any nested writers remaining due to previous errors.
 	enc.w = enc.w[0:1]
