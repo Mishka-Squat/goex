@@ -266,3 +266,9 @@ func (enc *Encoder) EncodeValue(value reflect.Value) error {
 	enc.freeEncoderState(state)
 	return enc.err
 }
+
+func (enc *Encoder) TypeId(e any) (int, bool) {
+	value := reflect.ValueOf(e)
+	id, ok := enc.sent[value.Type()]
+	return int(id), ok
+}
