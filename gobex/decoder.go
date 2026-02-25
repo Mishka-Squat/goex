@@ -9,7 +9,6 @@ import (
 	"errors"
 	"io"
 	"reflect"
-	"sync"
 
 	"github.com/Mishka-Squat/goex/unsafeex"
 )
@@ -27,7 +26,7 @@ const tooBig = (1 << 30) << (^uint(0) >> 62)
 // and its limits are not configurable. Take caution when decoding gob data
 // from untrusted sources.
 type Decoder struct {
-	mutex        sync.Mutex                             // each item must be received atomically
+	//mutex        sync.Mutex                             // each item must be received atomically
 	r            io.Reader                              // source of the data
 	buf          decBuffer                              // buffer for more efficient i/o from r
 	wireType     map[typeId]*wireType                   // map from remote ID to local description
@@ -45,17 +44,24 @@ type Decoder struct {
 // [bufio.Reader].
 func NewDecoder(r io.Reader) *Decoder {
 	dec := new(Decoder)
-	// We use the ability to read bytes as a plausible surrogate for buffering.
-	if _, ok := r.(io.ByteReader); !ok {
-		r = bufio.NewReader(r)
-	}
-	dec.r = r
+	dec.Make()
+	dec.SetReader(r)
+
+	return dec
+}
+
+func (dec *Decoder) Make() {
 	dec.wireType = make(map[typeId]*wireType)
 	dec.decoderCache = make(map[reflect.Type]map[typeId]*decEngine)
 	dec.ignorerCache = make(map[typeId]*decEngine)
 	dec.countBuf = make([]byte, 9) // counts may be uint64s (unlikely!), require 9 bytes
+}
 
-	return dec
+func (dec *Decoder) SetReader(r io.Reader) {
+	if _, ok := r.(io.ByteReader); !ok {
+		r = bufio.NewReader(r)
+	}
+	dec.r = r
 }
 
 func (dec *Decoder) typeSize(id typeId) uint32 {
@@ -255,8 +261,8 @@ func (dec *Decoder) DecodeValue(v reflect.Value) error {
 		}
 	}
 	// Make sure we're single-threaded through here.
-	dec.mutex.Lock()
-	defer dec.mutex.Unlock()
+	//dec.mutex.Lock()
+	//defer dec.mutex.Unlock()
 
 	dec.buf.Reset() // In case data lingers from previous invocation.
 	dec.err = nil
@@ -275,8 +281,8 @@ func (dec *Decoder) DecodeValue(v reflect.Value) error {
 // does not modify v.
 func (dec *Decoder) DecodeJson() (v any, err error) {
 	// Make sure we're single-threaded through here.
-	dec.mutex.Lock()
-	defer dec.mutex.Unlock()
+	//dec.mutex.Lock()
+	//defer dec.mutex.Unlock()
 
 	dec.buf.Reset() // In case data lingers from previous invocation.
 	dec.err = nil

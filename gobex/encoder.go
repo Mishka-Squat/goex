@@ -32,9 +32,9 @@ var spaceForLength = make([]byte, maxLength)
 // NewEncoder returns a new encoder that will transmit on the [io.Writer].
 func NewEncoder(w io.Writer) *Encoder {
 	enc := new(Encoder)
-	enc.w = []io.Writer{w}
-	enc.sent = make(map[reflect.Type]typeId)
-	enc.countState = enc.newEncoderState(new(encBuffer))
+	enc.Make()
+	enc.SetWriter(w)
+
 	return enc
 }
 
