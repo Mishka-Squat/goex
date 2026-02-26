@@ -293,6 +293,19 @@ func (dec *Decoder) DecodeJson() (v any, err error) {
 	return v, dec.err
 }
 
+// DecodeValue reads the next value from the input stream.
+// If v is the zero reflect.Value (v.Kind() == Invalid), DecodeValue discards the value.
+// Otherwise, it stores the value into v. In that case, v must represent
+// a non-nil pointer to data or be an assignable reflect.Value (v.CanSet())
+// If the input is at EOF, DecodeValue returns [io.EOF] and
+// does not modify v.
+func (dec *Decoder) DecodeType() (int, error) {
+	dec.buf.Reset() // In case data lingers from previous invocation.
+	dec.err = nil
+	id := dec.decodeTypeSequence(false)
+	return int(id), dec.err
+}
+
 // If debug.go is compiled into the program, debugFunc prints a human-readable
 // representation of the gob data read from r by calling that file's Debug function.
 // Otherwise it is nil.

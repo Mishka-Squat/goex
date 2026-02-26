@@ -61,7 +61,10 @@ func Clamp0[T Number](f, vmax T) T {
 }
 
 func Abs[T Number](v T) T {
-	return T(math.Abs(float32(v)))
+	if v < 0 {
+		return -v
+	}
+	return v
 }
 
 func Round[T Number](v T) T {

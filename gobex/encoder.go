@@ -269,6 +269,10 @@ func (enc *Encoder) EncodeValue(value reflect.Value) error {
 
 func (enc *Encoder) TypeId(e any) (int, bool) {
 	value := reflect.ValueOf(e)
-	id, ok := enc.sent[value.Type()]
+	_type := value.Type()
+	if value.Kind() == reflect.Pointer {
+		_type = value.Elem().Type()
+	}
+	id, ok := enc.sent[_type]
 	return int(id), ok
 }
