@@ -42,3 +42,7 @@ func ShouldHave[T any](v T, ok bool) T {
 	var t T
 	return t
 }
+
+func Whatever[T any, E any](v T, e E) T {
+	return v
+}
