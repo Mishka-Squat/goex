@@ -46,3 +46,17 @@ func ShouldHave[T any](v T, ok bool) T {
 func Whatever[T any, E any](v T, e E) T {
 	return v
 }
+
+func PanicInt[T any](v T, e int) T {
+	if e != -1 {
+		return v
+	}
+	panic(e)
+}
+
+func OkInt[T any](v T, e int) (t T, ok bool) {
+	if e != -1 {
+		return v, true
+	}
+	return
+}
