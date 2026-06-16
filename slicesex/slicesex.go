@@ -168,6 +168,20 @@ func Range(start int, count int) iter.Seq[int] {
 	return xiter.Limit(xiter.Generate(start, 1), count)
 }
 
+func Split[T xiter.Comparable](start, end T, step T) iter.Seq[T] {
+	return func(yield func(T) bool) {
+		for v := range xiter.Generate(start, step) {
+			if v > end {
+				return
+			}
+
+			if !yield(v) {
+				return
+			}
+		}
+	}
+}
+
 func ToSet[V comparable](seq []V) map[V]struct{} {
 	m := map[V]struct{}{}
 	for _, k := range seq {
