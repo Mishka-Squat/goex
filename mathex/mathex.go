@@ -142,3 +142,7 @@ func Exp[T Number](v T) T {
 func Expm1[T Number](v T) T {
 	return T(math.Expm1(float32(v)))
 }
+
+func Pow[T Number](x, v T) T {
+	return T(math.Pow(float32(x), float32(v)))
+}
