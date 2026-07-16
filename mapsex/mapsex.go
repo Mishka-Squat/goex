@@ -106,7 +106,24 @@ func AppendMultiMap[K comparable, V any](m map[K][]V, key K, value V) map[K][]V 
 
 // Append value to multimap
 func InsertKeys[K comparable, V any](m map[K]V, keys ...K) map[K]V {
+	if m == nil {
+		m = map[K]V{}
+	}
+
 	for _, key := range keys {
+		var v V
+		m[key] = v
+	}
+
+	return m
+}
+
+func InsertKeysSeq[K comparable, V any](m map[K]V, keys iter.Seq[K]) map[K]V {
+	if m == nil {
+		m = map[K]V{}
+	}
+
+	for key := range keys {
 		var v V
 		m[key] = v
 	}
