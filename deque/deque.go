@@ -177,6 +177,36 @@ func (d Of[T]) Reserve(capacity int) Of[T] {
 	return d
 }
 
+/*
+func (d Of[T]) ReserveBlock(size int) Of[T] {
+	page_index := capacity / d.items_per_page
+	item_index := capacity % d.items_per_page
+	if item_index != 0 {
+		page_index++
+	}
+
+	if len(d.pages) < page_index {
+		d.pages = slices.Grow(d.pages, page_index)
+		for i := len(d.pages); i < page_index-1; i++ {
+			d.pages = append(d.pages, d.makePage()[0:d.items_per_page])
+		}
+		if item_index == 0 {
+			d.pages = append(d.pages, d.makePage()[0:d.items_per_page])
+		} else {
+			d.pages = append(d.pages, d.makePage()[0:min(d.items_per_page, item_index)])
+		}
+	}
+
+	last_index := capacity - 1
+	page_index = last_index / d.items_per_page
+	item_index = last_index % d.items_per_page
+
+	page := d.pages[page_index]
+	d.pages[page_index] = page[0:max(len(page), item_index+1)]
+	return d
+}
+*/
+
 func (d Of[T]) Append(v T) Of[T] {
 	lastPage := d.lastPage()
 	if cap(lastPage) == 0 || len(lastPage) == cap(lastPage) {
