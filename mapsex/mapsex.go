@@ -130,3 +130,31 @@ func InsertKeysSeq[K comparable, V any](m map[K]V, keys iter.Seq[K]) map[K]V {
 
 	return m
 }
+
+func Combine[K comparable, V any](m1, m2 map[K]V) bool {
+	if len(m2) > len(m1) {
+		m1, m2 = m2, m1
+	}
+
+	for k := range m2 {
+		if _, ok := m1[k]; ok {
+			return true
+		}
+	}
+
+	return false
+}
+
+func Intersect[K comparable, V any](m1, m2 map[K]V) bool {
+	if len(m2) > len(m1) {
+		m1, m2 = m2, m1
+	}
+
+	for k := range m2 {
+		if _, ok := m1[k]; ok {
+			return true
+		}
+	}
+
+	return false
+}

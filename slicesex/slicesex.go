@@ -96,6 +96,12 @@ func First[S ~[]E, E any](x S) E {
 	return e
 }
 
+func Do[S ~[]E, E any](x S, fn func(E)) {
+	for i := range x {
+		fn(x[i])
+	}
+}
+
 // Special version for arrray iteration
 func Any[S ~[]E, E any](x S, fn func(E) bool) bool {
 	return xiter.Any(slices.Values(x), fn)
