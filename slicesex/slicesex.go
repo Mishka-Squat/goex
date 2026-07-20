@@ -142,7 +142,7 @@ func FilterSet[S ~[]E, E comparable, V any](x S, set map[E]V) []E {
 	return r
 }
 
-func Map[S ~[]E, E, V any](x S, fn func(E) V) iter.Seq[V] {
+func MapSeq[S ~[]E, E, V any](x S, fn func(E) V) iter.Seq[V] {
 	return xiter.Map(slices.Values(x), fn)
 }
 
@@ -153,8 +153,15 @@ func Apply[S ~[]E, E any](x S, fn func(E) E) []E {
 	return x
 }
 
-func Transform[S ~[]E, E, V any](x S, fn func(E) V) []V {
+func Map[S ~[]E, E, V any](x S, fn func(E) V) []V {
 	return xiter.CollectSize(xiter.Map(slices.Values(x), fn), len(x))
+}
+
+func Reduce[S ~[]T, T, R any](x S, initial R, reducer func(R, T) R) R {
+	for _, v := range x {
+		initial = reducer(initial, v)
+	}
+	return initial
 }
 
 func ReplaceFunc[S ~[]E, E any](s S, v E, fn func(E) bool) ([]E, bool) {

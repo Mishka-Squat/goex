@@ -106,7 +106,7 @@ func GetFieldDeclTypeName(fieldType ast.Expr) (string, bool) {
 	case *ast.IndexListExpr:
 		if x, ok := GetFieldDeclTypeName(fieldType.X); ok {
 			return x + "[" +
-				stringsex.JoinSeq(slicesex.Map(fieldType.Indices, func(e ast.Expr) string {
+				stringsex.JoinSeq(slicesex.MapSeq(fieldType.Indices, func(e ast.Expr) string {
 					return gx.ShouldHave(GetFieldDeclTypeName(e))
 				}), ", ") +
 				"]", true
@@ -116,7 +116,7 @@ func GetFieldDeclTypeName(fieldType ast.Expr) (string, bool) {
 			stringsex.JoinSeq(xiter.Map(
 				FuncTypeParamsSeq(fieldType), func(f *ast.Field) string {
 					if len(f.Names) > 0 {
-						return stringsex.JoinSeq(slicesex.Map(f.Names, func(i *ast.Ident) string { return i.Name }), ", ") +
+						return stringsex.JoinSeq(slicesex.MapSeq(f.Names, func(i *ast.Ident) string { return i.Name }), ", ") +
 							" " + gx.ShouldHave(GetFieldDeclTypeName(f.Type))
 					} else {
 						return gx.ShouldHave(GetFieldDeclTypeName(f.Type))
