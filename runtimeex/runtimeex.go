@@ -5,6 +5,10 @@ import (
 	"runtime"
 )
 
+func GetFunctionName() string {
+	return GetCallerName(1)
+}
+
 func GetCallerName(skip int) (name string) {
 	name = "<unknown>"
 	pc, _, _, ok := runtime.Caller(1 + skip)
