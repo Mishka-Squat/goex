@@ -60,6 +60,10 @@ func Clamp0[T Number](f, vmax T) T {
 	return max(min(f, vmax), 0)
 }
 
+func Fract[T Number](v T) T {
+	return v - T(int(v))
+}
+
 func Abs[T Number](v T) T {
 	if v < 0 {
 		return -v
