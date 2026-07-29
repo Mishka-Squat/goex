@@ -20,6 +20,17 @@ func Must[T any](v T, e error) T {
 	return v
 }
 
+type validInterface interface {
+	IsValid() bool
+}
+
+func MustValid[T validInterface](v T) T {
+	if !v.IsValid() {
+		panic("Not valid!!!")
+	}
+	return v
+}
+
 func Should[T any](v T, e error) T {
 	if e != nil {
 		var d T

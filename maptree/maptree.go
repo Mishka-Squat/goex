@@ -1,18 +1,24 @@
-package goex
+package maptree
 
 import (
 	"iter"
+
+	"github.com/Mishka-Squat/goex"
 )
 
-// MapTree is a container with two type of node values - either V values or MapTree[K, V] values
+// Of is a container with two type of node values - either V values or Of[K, V] values
 // so that is basically a tree structure built round golang map implementation
-type MapTree[K comparable, V any] map[K]any
+type Of[K comparable, V any] map[K]any
 
-func (m MapTree[K, V]) Root() map[K]any {
+func Make[V any, K comparable](v map[K]any) Of[K, V] {
+	return Of[K, V](v)
+}
+
+func (m Of[K, V]) Root() map[K]any {
 	return m
 }
 
-func (m MapTree[K, V]) IsEmpty() bool {
+func (m Of[K, V]) IsEmpty() bool {
 	return len(m) == 0
 }
 
@@ -20,14 +26,14 @@ func (m MapTree[K, V]) IsEmpty() bool {
 //
 //}
 
-func (m MapTree[K, V]) Clone_() (r MapTree[K, V]) {
-	r = MapTree[K, V]{}
+func (m Of[K, V]) Clone_() (r Of[K, V]) {
+	r = Of[K, V]{}
 
 	for k, v := range m {
 		switch v := v.(type) {
 		case map[K]any:
-			r[k] = MapTree[K, V](v).Clone()
-		case Cloner:
+			r[k] = Of[K, V](v).Clone()
+		case goex.Cloner:
 			r[k] = v.Clone()
 		default:
 			r[k] = v
@@ -37,11 +43,11 @@ func (m MapTree[K, V]) Clone_() (r MapTree[K, V]) {
 	return r
 }
 
-func (m MapTree[K, V]) Clone() any {
+func (m Of[K, V]) Clone() any {
 	return m.Clone_()
 }
 
-func (m MapTree[K, V]) Contains(path ...K) (ok bool) {
+func (m Of[K, V]) Contains(path ...K) (ok bool) {
 	r := m
 	li := len(path) - 1
 	for i, name := range path {
@@ -59,9 +65,9 @@ func (m MapTree[K, V]) Contains(path ...K) (ok bool) {
 	return true // empty path is ture
 }
 
-func (m MapTree[K, V]) EnumObjects(path ...K) iter.Seq2[K, MapTree[K, V]] {
+func (m Of[K, V]) EnumObjects(path ...K) iter.Seq2[K, Of[K, V]] {
 	if o, ok := m.GetNode(path...); ok {
-		return func(yield func(K, MapTree[K, V]) bool) {
+		return func(yield func(K, Of[K, V]) bool) {
 			for name, v := range o.Root() {
 				if v, ok := m.toNode(v); ok {
 					if !yield(name, v) {
@@ -72,10 +78,10 @@ func (m MapTree[K, V]) EnumObjects(path ...K) iter.Seq2[K, MapTree[K, V]] {
 		}
 	}
 
-	return func(yield func(K, MapTree[K, V]) bool) {}
+	return func(yield func(K, Of[K, V]) bool) {}
 }
 
-func (m MapTree[K, V]) Get(path ...K) (v V, ok bool) {
+func (m Of[K, V]) Get(path ...K) (v V, ok bool) {
 	r := m
 	li := len(path) - 1
 	for i, name := range path {
@@ -106,7 +112,7 @@ func (m MapTree[K, V]) Get(path ...K) (v V, ok bool) {
 	return
 }
 
-func (m MapTree[K, V]) GetNode(path ...K) (v MapTree[K, V], ok bool) {
+func (m Of[K, V]) GetNode(path ...K) (v Of[K, V], ok bool) {
 	r := m
 	li := len(path) - 1
 	if li < 0 {
@@ -128,12 +134,12 @@ func (m MapTree[K, V]) GetNode(path ...K) (v MapTree[K, V], ok bool) {
 		}
 	}
 
-	v = MapTree[K, V]{}
+	v = Of[K, V]{}
 	ok = false
 	return
 }
 
-func (m MapTree[K, V]) GetAny(path ...K) (v any, ok bool) {
+func (m Of[K, V]) GetAny(path ...K) (v any, ok bool) {
 	r := m
 	li := len(path) - 1
 	for i, name := range path {
@@ -156,7 +162,7 @@ func (m MapTree[K, V]) GetAny(path ...K) (v any, ok bool) {
 	return
 }
 
-func (m MapTree[K, V]) Set(v V, path ...K) (ok bool) {
+func (m Of[K, V]) Set(v V, path ...K) (ok bool) {
 	if len(path) == 0 {
 		return
 	}
@@ -171,13 +177,13 @@ func (m MapTree[K, V]) Set(v V, path ...K) (ok bool) {
 		} else {
 			if ar, ok := r[name]; ok {
 				switch ar := ar.(type) {
-				case MapTree[K, V]:
+				case Of[K, V]:
 					r = ar
 				default:
 					return false // not a node can not traverse deeper
 				}
 			} else { // no node found, create new
-				n := MapTree[K, V]{}
+				n := Of[K, V]{}
 				r[name] = n
 				r = n
 			}
@@ -187,7 +193,7 @@ func (m MapTree[K, V]) Set(v V, path ...K) (ok bool) {
 	return false
 }
 
-func (m MapTree[K, V]) SetNode(v MapTree[K, V], path ...K) (ok bool) {
+func (m Of[K, V]) SetNode(v Of[K, V], path ...K) (ok bool) {
 	if len(path) == 0 {
 		return
 	}
@@ -202,13 +208,13 @@ func (m MapTree[K, V]) SetNode(v MapTree[K, V], path ...K) (ok bool) {
 		} else {
 			if ar, ok := r[name]; ok {
 				switch ar := ar.(type) {
-				case MapTree[K, V]:
+				case Of[K, V]:
 					r = ar
 				default:
 					return false // not a node can not traverse deeper
 				}
 			} else { // no node found, create new
-				n := MapTree[K, V]{}
+				n := Of[K, V]{}
 				r[name] = n
 				r = n
 			}
@@ -218,11 +224,11 @@ func (m MapTree[K, V]) SetNode(v MapTree[K, V], path ...K) (ok bool) {
 	return false
 }
 
-func (m MapTree[K, V]) Merge(data MapTree[K, V]) (ok bool) {
+func (m Of[K, V]) Merge(data Of[K, V]) (ok bool) {
 	for k, v := range data {
 		if mv, ok := m[k]; ok {
-			data_node, okv := v.(MapTree[K, V])
-			m_node, okmv := mv.(MapTree[K, V])
+			data_node, okv := v.(Of[K, V])
+			m_node, okmv := mv.(Of[K, V])
 
 			if okv && okmv {
 				m_node.Merge(data_node)
@@ -239,7 +245,7 @@ func (m MapTree[K, V]) Merge(data MapTree[K, V]) (ok bool) {
 	return true
 }
 
-func (m MapTree[K, V]) getNode(key K) (r MapTree[K, V], ok bool) {
+func (m Of[K, V]) getNode(key K) (r Of[K, V], ok bool) {
 	ar, ok := m[key]
 	if !ok {
 		return nil, false
@@ -248,12 +254,12 @@ func (m MapTree[K, V]) getNode(key K) (r MapTree[K, V], ok bool) {
 	return m.toNode(ar)
 }
 
-func (m MapTree[K, V]) toNode(v any) (r MapTree[K, V], ok bool) {
+func (m Of[K, V]) toNode(v any) (r Of[K, V], ok bool) {
 	switch v := v.(type) {
-	case MapTree[K, V]:
+	case Of[K, V]:
 		return v, true
 	case map[K]any:
-		return MapTree[K, V](v), true
+		return Of[K, V](v), true
 	}
 
 	return nil, false

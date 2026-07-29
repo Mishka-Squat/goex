@@ -1,4 +1,4 @@
-package goex
+package maptree
 
 import (
 	"testing"
@@ -7,14 +7,14 @@ import (
 )
 
 func TestMapTree_Clone(t *testing.T) {
-	tree := MapTree[string, any]{
+	tree := Of[string, any]{
 		"a": 1,
-		"b": MapTree[string, any]{
+		"b": Of[string, any]{
 			"c": "value",
 		},
 	}
 
-	clone := tree.Clone().(MapTree[string, any])
+	clone := tree.Clone().(Of[string, any])
 	assert.Equal(t, tree, clone)
 
 	// Modify clone shouldn't affect original
@@ -23,9 +23,9 @@ func TestMapTree_Clone(t *testing.T) {
 }
 
 func TestMapTree_Contains(t *testing.T) {
-	tree := MapTree[string, any]{
-		"a": MapTree[string, any]{
-			"b": MapTree[string, any]{
+	tree := Of[string, any]{
+		"a": Of[string, any]{
+			"b": Of[string, any]{
 				"c": "value",
 			},
 		},
@@ -50,9 +50,9 @@ func TestMapTree_Contains(t *testing.T) {
 }
 
 func TestMapTree_Get(t *testing.T) {
-	tree := MapTree[string, string]{
+	tree := Of[string, string]{
 		"a": "value1",
-		"b": MapTree[string, string]{
+		"b": Of[string, string]{
 			"c": "value2",
 		},
 	}
@@ -78,9 +78,9 @@ func TestMapTree_Get(t *testing.T) {
 }
 
 func TestMapTree_GetAny(t *testing.T) {
-	tree := MapTree[string, any]{
+	tree := Of[string, any]{
 		"a": 1,
-		"b": MapTree[string, any]{
+		"b": Of[string, any]{
 			"c": "value",
 		},
 	}
@@ -106,7 +106,7 @@ func TestMapTree_GetAny(t *testing.T) {
 }
 
 func TestMapTree_Set(t *testing.T) {
-	tree := MapTree[string, any]{}
+	tree := Of[string, any]{}
 
 	tests := []struct {
 		path  []string
@@ -130,16 +130,16 @@ func TestMapTree_Set(t *testing.T) {
 }
 
 func TestMapTree_Merge(t *testing.T) {
-	tree1 := MapTree[string, any]{
+	tree1 := Of[string, any]{
 		"a": 1,
-		"b": MapTree[string, any]{
+		"b": Of[string, any]{
 			"c": "value1",
 		},
 	}
 
-	tree2 := MapTree[string, any]{
+	tree2 := Of[string, any]{
 		"a": 2,
-		"b": MapTree[string, any]{
+		"b": Of[string, any]{
 			"c": "value2",
 			"d": "value3",
 		},
@@ -147,12 +147,12 @@ func TestMapTree_Merge(t *testing.T) {
 
 	assert.True(t, tree1.Merge(tree2))
 	assert.Equal(t, 2, tree1["a"])
-	b := tree1["b"].(MapTree[string, any])
+	b := tree1["b"].(Of[string, any])
 	assert.Equal(t, "value2", b["c"])
 	assert.Equal(t, "value3", b["d"])
 
 	// Test incompatible merge
-	incompatible := MapTree[string, any]{
+	incompatible := Of[string, any]{
 		"b": "not a map",
 	}
 	assert.False(t, tree1.Merge(incompatible))
