@@ -4,11 +4,12 @@ go 1.26
 
 require (
 	deedles.dev/xiter v0.2.1
-	github.com/chewxy/math32 v1.11.1
+	github.com/chewxy/math32 v1.11.2
 	github.com/stretchr/testify v1.11.1
-	go.yaml.in/yaml/v4 v4.0.0-rc.4
-	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f
-	golang.org/x/sys v0.43.0
+	go.yaml.in/yaml/v4 v4.0.0-rc.6
+	golang.org/x/exp v0.0.0-20260727155853-b88d891fe743
+	golang.org/x/sys v0.47.0
+	golang.org/x/text v0.40.0
 )
 
 require (
