@@ -202,7 +202,7 @@ func MakeDecoder[T any](header []string) *DecoderT[T] {
 }
 
 type CsvParser interface {
-	ParseToAny(string) any
+	Parse(string) error
 }
 
 // Builds a transformer from header defined row to rtype struct
@@ -232,7 +232,7 @@ func (d *Decoder) appendDecodeOps(header headerMap, rtype reflect.Type, path ...
 			case reflect.Struct:
 				d.appendDecodeOps(header, field.Type, fieldPath...)
 			case reflect.Map:
-				d.appendMapDecodeOps(header, field.Type, fieldPath)
+				d.appendMapDecodeOps(header, field.Type, fieldPath...)
 			default:
 				// TODO: handle error
 			}
@@ -243,8 +243,8 @@ func (d *Decoder) appendDecodeOps(header headerMap, rtype reflect.Type, path ...
 		if field.Type.Implements(parserType) {
 			d.Ops = append(d.Ops, func(root reflect.Value, s string) error {
 				v := root.FieldByIndex(fieldPath)
-				pv := reflect.ValueOf(v.Interface().(CsvParser).ParseToAny(s))
-				v.Set(pv)
+				v.Interface().(CsvParser).Parse(s)
+				v.Set(v)
 
 				return nil
 			})
@@ -267,7 +267,7 @@ func (d *Decoder) appendDecodeOps(header headerMap, rtype reflect.Type, path ...
 // The header segment after the dot ("Food") is parsed straight into a map
 // key via the key type's CsvParser, mirroring how a struct's .Field name is
 // resolved for scalar/nested leaves.
-func (d *Decoder) appendMapDecodeOps(header headerMap, mapType reflect.Type, fieldPath []int) {
+func (d *Decoder) appendMapDecodeOps(header headerMap, mapType reflect.Type, fieldPath ...int) {
 	keyType := mapType.Key()
 	elemType := mapType.Elem()
 
@@ -275,14 +275,14 @@ func (d *Decoder) appendMapDecodeOps(header headerMap, mapType reflect.Type, fie
 	if !keyType.Implements(parserType) {
 		log.Fatal("wht")
 	}
-	zeroKey := reflect.Zero(keyType)
+	mapKey := reflect.Zero(keyType)
 
 	for name, leaf := range header.All() {
 		if _, ok := leaf.(headerMap); ok {
 			continue // TODO: handle error, nested maps not supported
 		}
 
-		keyVal := reflect.ValueOf(zeroKey.Interface().(CsvParser).ParseToAny(name))
+		mapKey.Interface().(CsvParser).Parse(name)
 
 		ensureMap := func(root reflect.Value) reflect.Value {
 			m := root.FieldByIndex(fieldPath)
@@ -295,9 +295,9 @@ func (d *Decoder) appendMapDecodeOps(header headerMap, mapType reflect.Type, fie
 		if elemType.Implements(parserType) {
 			d.Ops = append(d.Ops, func(root reflect.Value, s string) error {
 				m := ensureMap(root)
-				zeroElem := reflect.Zero(elemType)
-				parsed := zeroElem.Interface().(CsvParser).ParseToAny(s)
-				m.SetMapIndex(keyVal, reflect.ValueOf(parsed))
+				mapElem := reflect.Zero(elemType)
+				mapElem.Interface().(CsvParser).Parse(s)
+				m.SetMapIndex(mapKey, mapElem)
 				return nil
 			})
 			continue
@@ -310,7 +310,7 @@ func (d *Decoder) appendMapDecodeOps(header headerMap, mapType reflect.Type, fie
 				if err := op(elemPtr, s); err != nil {
 					return err
 				}
-				m.SetMapIndex(keyVal, elemPtr)
+				m.SetMapIndex(mapKey, elemPtr)
 				return nil
 			})
 			continue
