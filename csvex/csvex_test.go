@@ -27,10 +27,9 @@ func (c testColor) String() string {
 	return fmt.Sprintf("%d/%d/%d", c.R, c.G, c.B)
 }
 
-func (c testColor) ParseToAny(s string) any {
-	var r, g, b int
-	fmt.Sscanf(s, "%d/%d/%d", &r, &g, &b)
-	return testColor{R: r, G: g, B: b}
+func (c *testColor) Parse(s string) error {
+	fmt.Sscanf(s, "%d/%d/%d", &c.R, &c.G, &c.B)
+	return nil
 }
 
 type coloredRow struct {
@@ -218,11 +217,17 @@ func (t terrainKind) String() string {
 	return "Tundra"
 }
 
-func (t terrainKind) ParseToAny(s string) any {
-	if s == "ScrubForest" {
-		return terrainScrubForest
+func (t *terrainKind) Parse(s string) error {
+	switch s {
+	case "ScrubForest":
+		*t = terrainScrubForest
+	case "Tundra":
+		*t = terrainTundra
+	default:
+		return fmt.Errorf("Unknown")
 	}
-	return terrainTundra
+
+	return nil
 }
 
 type enumRow struct {
@@ -244,11 +249,17 @@ func (t resourceKind) String() string {
 	return "Ore"
 }
 
-func (t resourceKind) ParseToAny(s string) any {
-	if s == "Food" {
-		return resourceFood
+func (t *resourceKind) Parse(s string) error {
+	switch s {
+	case "Food":
+		*t = resourceFood
+	case "Ore":
+		*t = resourceOre
+	default:
+		return fmt.Errorf("Unknown")
 	}
-	return resourceOre
+
+	return nil
 }
 
 type mapTileRow struct {

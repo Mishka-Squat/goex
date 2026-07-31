@@ -4,7 +4,6 @@ import (
 	"errors"
 	"image/color"
 
-	"github.com/Mishka-Squat/goex/gx"
 	"go.yaml.in/yaml/v4"
 )
 
@@ -33,8 +32,13 @@ func (c *RGBA) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-func (c RGBA) ParseToAny(s string) any {
-	return RGBA(gx.Must(ParseHexColor(s)))
+func (c *RGBA) Parse(s string) error {
+	lc, err := ParseHexColor(s)
+	if err != nil {
+		return err
+	}
+	*c = RGBA(lc)
+	return nil
 }
 
 func ParseHexColor(s string) (c color.RGBA, err error) {
