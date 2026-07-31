@@ -183,50 +183,6 @@ func TestWriteThenReadCsvTable(t *testing.T) {
 	assert.Equal(t, items, got)
 }
 
-func BenchmarkEncode(b *testing.B) {
-	header := []string{"name", "age", "score", "active"}
-	item := simpleRow{Name: "Igor", Age: 42, Score: 3.5, Active: true}
-	encoder := MakeEncoder[simpleRow](header)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = encoder.Encode(item)
-	}
-}
-
-func BenchmarkDecode(b *testing.B) {
-	header := []string{"name", "age", "score", "active"}
-	row := []string{"Igor", "42", "3.5", "true"}
-	decoder := MakeDecoder[simpleRow](header)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = decoder.Decode(row)
-	}
-}
-
-func BenchmarkEncodeCustomType(b *testing.B) {
-	header := []string{"name", "color"}
-	item := coloredRow{Name: "sky", Color: testColor{R: 10, G: 20, B: 30}}
-	encoder := MakeEncoder[coloredRow](header)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = encoder.Encode(item)
-	}
-}
-
-func BenchmarkDecodeCustomType(b *testing.B) {
-	header := []string{"name", "color"}
-	row := []string{"sky", "10/20/30"}
-	decoder := MakeDecoder[coloredRow](header)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = decoder.Decode(row)
-	}
-}
-
 // terrainKind mimics a real game enum type (backed by a primitive kind but
 // implementing CsvParser/CsvFormatter), which exercises the same code path
 // as production types like colonization.TerrainType.
