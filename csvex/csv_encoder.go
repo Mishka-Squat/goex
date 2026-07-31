@@ -13,7 +13,7 @@ import (
 // field-index path down to the (possibly nested) leaf field is baked into
 // the closure at MakeEncoder time, so Encode just iterates Ops without
 // needing to know anything about struct shape or nesting.
-type encOp func(root reflect.Value, s *string) error
+type encOp func(root reflect.Value) (string, error)
 
 type Encoder struct {
 	Ops []encOp
@@ -23,74 +23,63 @@ type EncoderT[T any] struct { // T is used for encode
 	Encoder
 }
 
+type CsvFormatter interface {
+	String() string
+}
+
 type encoderMap map[reflect.Kind]encOp
 
 var globalEncoders encoderMap = makeStandardEncoderMap(encoderMap{})
 
 func makeStandardEncoderMap(m encoderMap) encoderMap {
-	m[reflect.Bool] = func(v reflect.Value, s *string) error {
-		*s = strconv.FormatBool(v.Bool())
-		return nil
+	m[reflect.Bool] = func(v reflect.Value) (string, error) {
+		return strconv.FormatBool(v.Bool()), nil
 	}
-	m[reflect.Int] = func(v reflect.Value, s *string) error {
-		*s = strconv.FormatInt(v.Int(), 10)
-		return nil
+	m[reflect.Int] = func(v reflect.Value) (string, error) {
+		return strconv.FormatInt(v.Int(), 10), nil
 	}
-	m[reflect.String] = func(v reflect.Value, s *string) error {
-		*s = v.String()
-		return nil
+	m[reflect.String] = func(v reflect.Value) (string, error) {
+		return v.String(), nil
 	}
-	m[reflect.Float64] = func(v reflect.Value, s *string) error {
-		*s = strconv.FormatFloat(v.Float(), 'f', -1, 64)
-		return nil
+	m[reflect.Float64] = func(v reflect.Value) (string, error) {
+		return strconv.FormatFloat(v.Float(), 'f', -1, 64), nil
 	}
-	m[reflect.Float32] = func(v reflect.Value, s *string) error {
-		*s = strconv.FormatFloat(v.Float(), 'f', -1, 32)
-		return nil
+	m[reflect.Float32] = func(v reflect.Value) (string, error) {
+		return strconv.FormatFloat(v.Float(), 'f', -1, 32), nil
 	}
-	m[reflect.Int64] = func(v reflect.Value, s *string) error {
-		*s = strconv.FormatInt(v.Int(), 10)
-		return nil
+	m[reflect.Int64] = func(v reflect.Value) (string, error) {
+		return strconv.FormatInt(v.Int(), 10), nil
 	}
-	m[reflect.Int32] = func(v reflect.Value, s *string) error {
-		*s = strconv.FormatInt(v.Int(), 10)
-		return nil
+	m[reflect.Int32] = func(v reflect.Value) (string, error) {
+		return strconv.FormatInt(v.Int(), 10), nil
 	}
-	m[reflect.Int16] = func(v reflect.Value, s *string) error {
-		*s = strconv.FormatInt(v.Int(), 10)
-		return nil
+	m[reflect.Int16] = func(v reflect.Value) (string, error) {
+		return strconv.FormatInt(v.Int(), 10), nil
 	}
-	m[reflect.Int8] = func(v reflect.Value, s *string) error {
-		*s = strconv.FormatInt(v.Int(), 10)
-		return nil
+	m[reflect.Int8] = func(v reflect.Value) (string, error) {
+		return strconv.FormatInt(v.Int(), 10), nil
 	}
-	m[reflect.Uint] = func(v reflect.Value, s *string) error {
-		*s = strconv.FormatUint(v.Uint(), 10)
-		return nil
+	m[reflect.Uint] = func(v reflect.Value) (string, error) {
+		return strconv.FormatUint(v.Uint(), 10), nil
 	}
-	m[reflect.Uint64] = func(v reflect.Value, s *string) error {
-		*s = strconv.FormatUint(v.Uint(), 10)
-		return nil
+	m[reflect.Uint64] = func(v reflect.Value) (string, error) {
+		return strconv.FormatUint(v.Uint(), 10), nil
 	}
-	m[reflect.Uint32] = func(v reflect.Value, s *string) error {
-		*s = strconv.FormatUint(v.Uint(), 10)
-		return nil
+	m[reflect.Uint32] = func(v reflect.Value) (string, error) {
+		return strconv.FormatUint(v.Uint(), 10), nil
 	}
-	m[reflect.Uint16] = func(v reflect.Value, s *string) error {
-		*s = strconv.FormatUint(v.Uint(), 10)
-		return nil
+	m[reflect.Uint16] = func(v reflect.Value) (string, error) {
+		return strconv.FormatUint(v.Uint(), 10), nil
 	}
-	m[reflect.Uint8] = func(v reflect.Value, s *string) error {
-		*s = strconv.FormatUint(v.Uint(), 10)
-		return nil
+	m[reflect.Uint8] = func(v reflect.Value) (string, error) {
+		return strconv.FormatUint(v.Uint(), 10), nil
 	}
-	// m[reflect.Struct] = llok at  MakeDecoderAny
 
 	return m
 }
 
 func MakeEncoder[T any](header []string) *EncoderT[T] {
-	hmap := HeaderToMap(header)
+	hmap := headerToMap(header)
 	rtype := reflect.TypeFor[T]()
 
 	return &EncoderT[T]{
@@ -98,12 +87,8 @@ func MakeEncoder[T any](header []string) *EncoderT[T] {
 	}
 }
 
-type CsvFormatter interface {
-	String() string
-}
-
 // Builds a transformer from rtype struct to header difned row
-func MakeEncoderAny(rtype reflect.Type, header HeaderMap) Encoder {
+func MakeEncoderAny(rtype reflect.Type, header headerMap) Encoder {
 	var e Encoder
 	appendEncodeOps(&e, rtype, header, nil)
 	return e
@@ -113,7 +98,7 @@ func MakeEncoderAny(rtype reflect.Type, header HeaderMap) Encoder {
 // or CsvFormatter) field to e.Ops. path is the field-index path, relative to
 // the root struct, of rtype itself, so ops built for nested structs bake in
 // the full path down from the root rather than just their local field index.
-func appendEncodeOps(e *Encoder, rtype reflect.Type, header HeaderMap, path []int) {
+func appendEncodeOps(e *Encoder, rtype reflect.Type, header headerMap, path []int) {
 	fields := fieldsByName(rtype)
 
 	for name, header := range header.All() {
@@ -124,7 +109,7 @@ func appendEncodeOps(e *Encoder, rtype reflect.Type, header HeaderMap, path []in
 		}
 		fieldPath := joinIndex(path, field.Index)
 
-		if header, ok := header.(HeaderMap); ok {
+		if header, ok := header.(headerMap); ok {
 			if field.Type.Kind() != reflect.Struct {
 				continue // TODO: handle error
 			}
@@ -132,37 +117,44 @@ func appendEncodeOps(e *Encoder, rtype reflect.Type, header HeaderMap, path []in
 			continue
 		}
 
-		if op, ok := globalEncoders[field.Type.Kind()]; ok {
-			e.Ops = append(e.Ops, func(root reflect.Value, s *string) error {
-				return op(root.FieldByIndex(fieldPath), s)
+		formatterType := reflect.TypeFor[CsvFormatter]()
+		if field.Type.Implements(formatterType) {
+			e.Ops = append(e.Ops, func(root reflect.Value) (string, error) {
+				v := root.FieldByIndex(fieldPath)
+				method := gx.MustValid(v.MethodByName("String"))
+				rv := method.Call(nil)
+
+				return rv[0].String(), nil
 			})
 			continue
 		}
 
-		formatterType := reflect.TypeFor[CsvFormatter]()
-		if !field.Type.Implements(formatterType) {
-			log.Fatal("wht")
+		if op, ok := globalEncoders[field.Type.Kind()]; ok {
+			e.Ops = append(e.Ops, func(root reflect.Value) (string, error) {
+				return op(root.FieldByIndex(fieldPath))
+			})
 			continue
 		}
 
-		e.Ops = append(e.Ops, func(root reflect.Value, s *string) error {
-			v := root.FieldByIndex(fieldPath)
-			method := gx.MustValid(v.MethodByName("String"))
-			rv := method.Call(nil)
-			*s = rv[0].String()
-
-			return nil
-		})
+		log.Fatal("wht")
 	}
 }
 
-func (e EncoderT[T]) Encode(item T) []string {
+func (e EncoderT[T]) Encode(item T) ([]string, error) {
 	v := reflect.ValueOf(&item).Elem()
 	row := make([]string, len(e.Ops))
 
+	var firstErr error
 	for i, op := range e.Ops {
-		_ = op(v, &row[i]) // TODO: handle error
+		s, err := op(v)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue // skip faulty field, leave zero value
+		}
+		row[i] = s
 	}
 
-	return row
+	return row, firstErr
 }

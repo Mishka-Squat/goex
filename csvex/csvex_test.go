@@ -49,7 +49,7 @@ type nestedPersonRow struct {
 }
 
 func TestHeaderToMap(t *testing.T) {
-	h := HeaderToMap([]string{"name", "age"})
+	h := headerToMap([]string{"name", "age"})
 
 	got := []string{}
 	for k := range h.All() {
@@ -65,12 +65,14 @@ func TestEncodeDecodeScalars(t *testing.T) {
 	item := simpleRow{Name: "Igor", Age: 42, Score: 3.5, Active: true}
 
 	encoder := MakeEncoder[simpleRow](header)
-	row := encoder.Encode(item)
+	row, err := encoder.Encode(item)
+	require.NoError(t, err)
 
 	assert.Equal(t, []string{"Igor", "42", "3.5", "true"}, row)
 
 	decoder := MakeDecoder[simpleRow](header)
-	decoded := decoder.Decode(row)
+	decoded, err := decoder.Decode(row)
+	require.NoError(t, err)
 
 	assert.Equal(t, item, decoded)
 }
@@ -81,12 +83,14 @@ func TestEncodeDecodeCustomType(t *testing.T) {
 	item := coloredRow{Name: "sky", Color: testColor{R: 10, G: 20, B: 30}}
 
 	encoder := MakeEncoder[coloredRow](header)
-	row := encoder.Encode(item)
+	row, err := encoder.Encode(item)
+	require.NoError(t, err)
 
 	assert.Equal(t, []string{"sky", "10/20/30"}, row)
 
 	decoder := MakeDecoder[coloredRow](header)
-	decoded := decoder.Decode(row)
+	decoded, err := decoder.Decode(row)
+	require.NoError(t, err)
 
 	assert.Equal(t, item, decoded)
 }
@@ -102,7 +106,7 @@ func TestEncodeDecodeCustomType(t *testing.T) {
 //     breaks that assumption.
 
 func TestHeaderToMapNestedFields(t *testing.T) {
-	h := HeaderToMap([]string{"name", "address.street", "address.city"})
+	h := headerToMap([]string{"name", "address.street", "address.city"})
 
 	addr, ok := h.Get("address")
 	require.True(t, ok, "HeaderToMap() missing %q key", "address")
@@ -119,7 +123,8 @@ func TestEncodeNestedStruct(t *testing.T) {
 	item := nestedPersonRow{Name: "Igor", Address: nestedAddress{Street: "Baker St", City: "Metropolis"}}
 
 	encoder := MakeEncoder[nestedPersonRow](header)
-	row := encoder.Encode(item)
+	row, err := encoder.Encode(item)
+	require.NoError(t, err)
 
 	assert.Equal(t, []string{"Igor", "Baker St", "Metropolis"}, row)
 }
@@ -137,7 +142,9 @@ func TestDecodeNestedStruct(t *testing.T) {
 				t.Fatalf("Decode() panicked: %v", r)
 			}
 		}()
-		decoded = decoder.Decode([]string{"Igor", "Baker St", "Metropolis"})
+		var err error
+		decoded, err = decoder.Decode([]string{"Igor", "Baker St", "Metropolis"})
+		require.NoError(t, err)
 	}()
 
 	assert.Equal(t, item, decoded)
@@ -183,7 +190,7 @@ func BenchmarkEncode(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = encoder.Encode(item)
+		_, _ = encoder.Encode(item)
 	}
 }
 
@@ -194,7 +201,7 @@ func BenchmarkDecode(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = decoder.Decode(row)
+		_, _ = decoder.Decode(row)
 	}
 }
 
@@ -205,7 +212,7 @@ func BenchmarkEncodeCustomType(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = encoder.Encode(item)
+		_, _ = encoder.Encode(item)
 	}
 }
 
@@ -216,7 +223,7 @@ func BenchmarkDecodeCustomType(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = decoder.Decode(row)
+		_, _ = decoder.Decode(row)
 	}
 }
 
@@ -261,47 +268,28 @@ const mapTileCsv = "id,terrain,name,yield.Food,yield.Ore,is_forest,is_mountains\
 	"9,ScrubForest,Scrub Forest,1,1,true,false\n" +
 	"19,Tundra,Mountains,0,4,false,true\n"
 
-// TestReadCsvTable_MapTile documents two known limitations that show up
-// together on a realistic, game-shaped struct:
-//   - terrainKind's underlying kind (uint8) is looked up in globalDecoders
-//     before its CsvParser implementation is considered, so it's parsed as a
-//     plain integer, fails, and silently stays at its zero value instead of
-//     going through ParseToAny.
-//   - a dotted header segment ("yield.Food") is only wired up when the
-//     target field is itself a struct; Yield is a slice, so the "yield.*"
-//     pair of ops is silently dropped, and since Ops are matched to columns
-//     by position rather than by the header index they came from, every op
-//     downstream of the dropped pair reads from the wrong column: IsForest
-//     and IsMountains end up populated from the yield.Food/yield.Ore values
-//     instead of their own columns.
+// TestReadCsvTable_MapTile documents a remaining known limitation on a
+// realistic, game-shaped struct: a dotted header segment ("yield.Food") is
+// only wired up when the target field is itself a struct; Yield is a slice,
+// so the "yield.*" pair of ops is silently dropped, and since Ops are
+// matched to columns by position rather than by the header index they came
+// from, every op downstream of the dropped pair reads from the wrong
+// column: IsForest and IsMountains end up populated from the
+// yield.Food/yield.Ore values instead of their own columns. Now that Decode
+// surfaces field errors instead of swallowing them, that misalignment shows
+// up as a ParseBool error on the very first row ("2" is not a valid bool),
+// which ReadCsvTable propagates. Terrain itself round-trips correctly
+// through CsvParser/CsvFormatter.
 func TestReadCsvTable_MapTile(t *testing.T) {
 	rows, err := ReadCsvTable[mapTileRow](strings.NewReader(mapTileCsv))
-	require.NoError(t, err)
-	require.Len(t, rows, 3)
-
-	for _, row := range rows {
-		assert.Equal(t, terrainTundra, row.T.Terrain)
-		assert.Nil(t, row.T.Yield)
-	}
-
-	assert.Equal(t, "Tundra", rows[0].T.Name)
-	assert.False(t, rows[0].T.IsForest)
-	assert.False(t, rows[0].T.IsMountains)
-
-	// yield.Food=1, yield.Ore=1 leak into IsForest/IsMountains as ParseBool("1") == true.
-	assert.Equal(t, "Scrub Forest", rows[1].T.Name)
-	assert.True(t, rows[1].T.IsForest)
-	assert.True(t, rows[1].T.IsMountains)
-
-	assert.Equal(t, "Mountains", rows[2].T.Name)
-	assert.False(t, rows[2].T.IsForest)
-	assert.False(t, rows[2].T.IsMountains)
+	require.Error(t, err)
+	assert.Nil(t, rows)
 }
 
-// TestWriteCsvTable_MapTile mirrors the same limitations on the encode side:
-// Terrain is written as its raw numeric kind ("1") instead of through
-// CsvFormatter.String(), and IsForest's value lands in the yield.Food/
-// yield.Ore columns instead of is_forest/is_mountains, which are left blank.
+// TestWriteCsvTable_MapTile mirrors the same remaining limitation on the
+// encode side: Terrain correctly goes through CsvFormatter.String(), but
+// IsForest's value lands in the yield.Food/yield.Ore columns instead of
+// is_forest/is_mountains, which are left blank.
 func TestWriteCsvTable_MapTile(t *testing.T) {
 	items := []CsvRow[mapTileRow]{
 		{Id: "9", T: mapTileRow{
@@ -317,7 +305,7 @@ func TestWriteCsvTable_MapTile(t *testing.T) {
 	require.NoError(t, err)
 
 	want := "id,terrain,name,yield.Food,yield.Ore,is_forest,is_mountains\n" +
-		"9,1,Scrub Forest,true,false,,\n"
+		"9,ScrubForest,Scrub Forest,true,false,,\n"
 	assert.Equal(t, want, buf.String())
 }
 

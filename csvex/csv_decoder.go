@@ -194,7 +194,7 @@ func makeStandardDecoderMap(m decoderMap) decoderMap {
 }
 
 func MakeDecoder[T any](header []string) *DecoderT[T] {
-	hmap := HeaderToMap(header)
+	hmap := headerToMap(header)
 	rtype := reflect.TypeFor[T]()
 
 	return &DecoderT[T]{
@@ -207,7 +207,7 @@ type CsvParser interface {
 }
 
 // Builds a transformer from header defined row to rtype struct
-func MakeDecoderAny(header HeaderMap, rtype reflect.Type) Decoder {
+func MakeDecoderAny(header headerMap, rtype reflect.Type) Decoder {
 	var d Decoder
 	appendDecodeOps(&d, header, rtype, nil)
 	return d
@@ -217,7 +217,7 @@ func MakeDecoderAny(header HeaderMap, rtype reflect.Type) Decoder {
 // or CsvParser) field to d.Ops. path is the field-index path, relative to
 // the root struct, of rtype itself, so ops built for nested structs bake in
 // the full path down from the root rather than just their local field index.
-func appendDecodeOps(d *Decoder, header HeaderMap, rtype reflect.Type, path []int) {
+func appendDecodeOps(d *Decoder, header headerMap, rtype reflect.Type, path []int) {
 	fields := fieldsByName(rtype)
 
 	for name, header := range header.All() {
@@ -228,11 +228,26 @@ func appendDecodeOps(d *Decoder, header HeaderMap, rtype reflect.Type, path []in
 		}
 		fieldPath := joinIndex(path, field.Index)
 
-		if header, ok := header.(HeaderMap); ok {
+		if header, ok := header.(headerMap); ok {
 			if field.Type.Kind() != reflect.Struct {
 				continue // TODO: handle error
 			}
 			appendDecodeOps(d, header, field.Type, fieldPath)
+			continue
+		}
+
+		parserType := reflect.TypeFor[CsvParser]()
+		if field.Type.Implements(parserType) {
+			d.Ops = append(d.Ops, func(root reflect.Value, s string) error {
+				v := root.FieldByIndex(fieldPath)
+				method := gx.MustValid(v.MethodByName("ParseToAny"))
+				pv := method.Call([]reflect.Value{
+					reflect.ValueOf(s),
+				})
+				v.Set(pv[0].Elem())
+
+				return nil
+			})
 			continue
 		}
 
@@ -243,34 +258,23 @@ func appendDecodeOps(d *Decoder, header HeaderMap, rtype reflect.Type, path []in
 			continue
 		}
 
-		parserType := reflect.TypeFor[CsvParser]()
-		if !field.Type.Implements(parserType) {
-			log.Fatal("wht")
-			continue
-		}
-
-		d.Ops = append(d.Ops, func(root reflect.Value, s string) error {
-			v := root.FieldByIndex(fieldPath)
-			method := gx.MustValid(v.MethodByName("ParseToAny"))
-			pv := method.Call([]reflect.Value{
-				reflect.ValueOf(s),
-			})
-			v.Set(pv[0].Elem())
-
-			return nil
-		})
+		log.Fatal("wht")
 	}
 }
 
-func (d DecoderT[T]) Decode(row []string) T {
+func (d DecoderT[T]) Decode(row []string) (T, error) {
 	var item T
 	v := reflect.ValueOf(&item).Elem()
 
+	var firstErr error
 	for i, op := range d.Ops {
-		if i < len(row) {
-			_ = op(v, row[i]) // TODO: handle error
+		if i >= len(row) {
+			continue
+		}
+		if err := op(v, row[i]); err != nil && firstErr == nil {
+			firstErr = err // skip faulty field, leave zero value
 		}
 	}
 
-	return item
+	return item, firstErr
 }

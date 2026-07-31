@@ -26,10 +26,10 @@ func (r *Reader) ReadAllSeq() iter.Seq[[]string] {
 	}
 }
 
-type HeaderMap = orderedmap.Of[string, any]
+type headerMap = orderedmap.Of[string, any]
 
-func HeaderToMap(header []string) HeaderMap {
-	m := HeaderMap(orderedmap.Make[string, any]())
+func headerToMap(header []string) headerMap {
+	m := headerMap(orderedmap.Make[string, any]())
 	for _, h := range header {
 		parts := strings.Split(h, ".")
 		orderedmap.PathSet(m, none, parts...)
@@ -72,9 +72,13 @@ func ReadCsvTable[T any](r io.Reader) (items []CsvRow[T], err error) {
 	decoder := MakeDecoder[T](header)
 
 	for row := range (*Reader)(reader).ReadAllSeq() {
+		item, err := decoder.Decode(row[1:])
+		if err != nil {
+			return nil, err
+		}
 		items = append(items, CsvRow[T]{
 			Id: row[0],
-			T:  decoder.Decode(row[1:]),
+			T:  item,
 		})
 	}
 
@@ -93,7 +97,11 @@ func WriteCsvTable[T any](w io.Writer, header []string, items []CsvRow[T]) error
 	row := make([]string, len(header)+1)
 	for _, item := range items {
 		row[0] = item.Id
-		copy(row[1:], encoder.Encode(item.T))
+		encoded, err := encoder.Encode(item.T)
+		if err != nil {
+			return err
+		}
+		copy(row[1:], encoded)
 
 		if err := writer.Write(row); err != nil {
 			return err
