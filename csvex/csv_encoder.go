@@ -89,7 +89,7 @@ func MakeEncoder[T any](header []string) *EncoderT[T] {
 // Builds a transformer from rtype struct to header difned row
 func MakeEncoderAny(rtype reflect.Type, header headerMap) Encoder {
 	var e Encoder
-	appendEncodeOps(&e, rtype, header, nil)
+	e.appendEncodeOps(rtype, header)
 	return e
 }
 
@@ -97,7 +97,7 @@ func MakeEncoderAny(rtype reflect.Type, header headerMap) Encoder {
 // or CsvFormatter) field to e.Ops. path is the field-index path, relative to
 // the root struct, of rtype itself, so ops built for nested structs bake in
 // the full path down from the root rather than just their local field index.
-func appendEncodeOps(e *Encoder, rtype reflect.Type, header headerMap, path []int) {
+func (e *Encoder) appendEncodeOps(rtype reflect.Type, header headerMap, path ...int) {
 	fields := fieldsByName(rtype)
 
 	for name, header := range header.All() {
@@ -109,10 +109,14 @@ func appendEncodeOps(e *Encoder, rtype reflect.Type, header headerMap, path []in
 		fieldPath := joinIndex(path, field.Index)
 
 		if header, ok := header.(headerMap); ok {
-			if field.Type.Kind() != reflect.Struct {
-				continue // TODO: handle error
+			switch field.Type.Kind() {
+			case reflect.Struct:
+				e.appendEncodeOps(field.Type, header, fieldPath...)
+			case reflect.Map:
+				e.appendMapEncodeOps(field.Type, header, fieldPath)
+			default:
+				// TODO: handle error
 			}
-			appendEncodeOps(e, field.Type, header, fieldPath)
 			continue
 		}
 
@@ -136,8 +140,60 @@ func appendEncodeOps(e *Encoder, rtype reflect.Type, header headerMap, path []in
 	}
 }
 
+// appendMapEncodeOps appends one encOp per header entry for a map-typed
+// field, e.g. "yield.Food"/"yield.Ore" for a map[resourceKind]uint8 field.
+// The header segment after the dot ("Food") is parsed straight into a map
+// key via the key type's CsvParser, mirroring how a struct's .Field name is
+// resolved for scalar/nested leaves.
+func (e *Encoder) appendMapEncodeOps(mapType reflect.Type, header headerMap, fieldPath []int) {
+	keyType := mapType.Key()
+	elemType := mapType.Elem()
+
+	parserType := reflect.TypeFor[CsvParser]()
+	if !keyType.Implements(parserType) {
+		log.Fatal("wht")
+	}
+	zeroKey := reflect.Zero(keyType)
+
+	formatterType := reflect.TypeFor[CsvFormatter]()
+
+	for name, leaf := range header.All() {
+		if _, ok := leaf.(headerMap); ok {
+			continue // TODO: handle error, nested maps not supported
+		}
+
+		keyVal := reflect.ValueOf(zeroKey.Interface().(CsvParser).ParseToAny(name))
+
+		if elemType.Implements(formatterType) {
+			e.Ops = append(e.Ops, func(root reflect.Value) (string, error) {
+				m := root.FieldByIndex(fieldPath)
+				v := m.MapIndex(keyVal)
+				if !v.IsValid() {
+					return "", nil
+				}
+				return v.Interface().(CsvFormatter).String(), nil
+			})
+			continue
+		}
+
+		if op, ok := globalEncoders[elemType.Kind()]; ok {
+			e.Ops = append(e.Ops, func(root reflect.Value) (string, error) {
+				m := root.FieldByIndex(fieldPath)
+				v := m.MapIndex(keyVal)
+				if !v.IsValid() {
+					return "", nil
+				}
+				return op(v)
+			})
+			continue
+		}
+
+		log.Fatal("wht")
+	}
+}
+
 func (e EncoderT[T]) Encode(item T, row []string) error {
-	v := reflect.ValueOf(&item).Elem()
+	v := reflect.ValueOf(item)
 
 	var firstErr error
 	for i, op := range e.Ops {

@@ -230,10 +230,31 @@ type enumRow struct {
 	Terrain terrainKind
 }
 
+type resourceKind uint8
+
+const (
+	resourceFood resourceKind = iota
+	resourceOre
+)
+
+func (t resourceKind) String() string {
+	if t == resourceFood {
+		return "Food"
+	}
+	return "Ore"
+}
+
+func (t resourceKind) ParseToAny(s string) any {
+	if s == "Food" {
+		return resourceFood
+	}
+	return resourceOre
+}
+
 type mapTileRow struct {
 	Terrain     terrainKind
 	Name        string
-	Yield       []uint8
+	Yield       map[resourceKind]uint8
 	IsForest    bool
 	IsMountains bool
 }
@@ -247,34 +268,47 @@ const mapTileCsv = "id,terrain,name,yield.Food,yield.Ore,is_forest,is_mountains\
 	"9,ScrubForest,Scrub Forest,1,1,true,false\n" +
 	"19,Tundra,Mountains,0,4,false,true\n"
 
-// TestReadCsvTable_MapTile documents a remaining known limitation on a
-// realistic, game-shaped struct: a dotted header segment ("yield.Food") is
-// only wired up when the target field is itself a struct; Yield is a slice,
-// so the "yield.*" pair of ops is silently dropped, and since Ops are
-// matched to columns by position rather than by the header index they came
-// from, every op downstream of the dropped pair reads from the wrong
-// column: IsForest and IsMountains end up populated from the
-// yield.Food/yield.Ore values instead of their own columns. Now that Decode
-// surfaces field errors instead of swallowing them, that misalignment shows
-// up as a ParseBool error on the very first row ("2" is not a valid bool),
-// which ReadCsvTable propagates. Terrain itself round-trips correctly
-// through CsvParser/CsvFormatter.
+// TestReadCsvTable_MapTile exercises decoding a dotted header segment
+// ("yield.Food"/"yield.Ore") into a map field keyed by an enum that
+// implements CsvParser, on a realistic, game-shaped struct.
 func TestReadCsvTable_MapTile(t *testing.T) {
 	rows, err := ReadCsvTable[mapTileRow](strings.NewReader(mapTileCsv))
-	require.Error(t, err)
-	assert.Nil(t, rows)
-}
+	require.NoError(t, err)
 
-// TestWriteCsvTable_MapTile mirrors the same remaining limitation on the
-// encode side: Terrain correctly goes through CsvFormatter.String(), but
-// IsForest's value lands in the yield.Food/yield.Ore columns instead of
-// is_forest/is_mountains, which are left blank.
-func TestWriteCsvTable_MapTile(t *testing.T) {
-	items := []CsvRow[mapTileRow]{
+	want := []CsvRow[mapTileRow]{
+		{Id: "0", T: mapTileRow{
+			Terrain: terrainTundra,
+			Name:    "Tundra",
+			Yield:   map[resourceKind]uint8{resourceFood: 2, resourceOre: 2},
+		}},
 		{Id: "9", T: mapTileRow{
 			Terrain:  terrainScrubForest,
 			Name:     "Scrub Forest",
-			Yield:    []uint8{1, 1},
+			Yield:    map[resourceKind]uint8{resourceFood: 1, resourceOre: 1},
+			IsForest: true,
+		}},
+		{Id: "19", T: mapTileRow{
+			Terrain:     terrainTundra,
+			Name:        "Mountains",
+			Yield:       map[resourceKind]uint8{resourceFood: 0, resourceOre: 4},
+			IsMountains: true,
+		}},
+	}
+	assert.Equal(t, want, rows)
+}
+
+// TestWriteCsvTable_MapTile exercises encoding a map field keyed by an enum
+// that implements CsvFormatter into dotted header columns
+// ("yield.Food"/"yield.Ore"), alongside a plain CsvFormatter leaf (Terrain).
+func TestWriteCsvTable_MapTile(t *testing.T) {
+	items := []CsvRow[mapTileRow]{
+		{Id: "9", T: mapTileRow{
+			Terrain: terrainScrubForest,
+			Name:    "Scrub Forest",
+			Yield: map[resourceKind]uint8{
+				resourceFood: 3,
+				resourceOre:  1,
+			},
 			IsForest: true,
 		}},
 	}
@@ -284,7 +318,7 @@ func TestWriteCsvTable_MapTile(t *testing.T) {
 	require.NoError(t, err)
 
 	want := "id,terrain,name,yield.Food,yield.Ore,is_forest,is_mountains\n" +
-		"9,ScrubForest,Scrub Forest,true,false,,\n"
+		"9,ScrubForest,Scrub Forest,3,1,true,false\n"
 	assert.Equal(t, want, buf.String())
 }
 
