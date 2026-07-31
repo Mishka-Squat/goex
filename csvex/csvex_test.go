@@ -48,6 +48,21 @@ type nestedPersonRow struct {
 	Address nestedAddress
 }
 
+// EmbeddedAddress is embedded (anonymous) in embeddedPersonRow to exercise
+// Go struct embedding, as opposed to nestedAddress/nestedPersonRow above
+// which use an explicit named field. It must be exported so its field name
+// ("EmbeddedAddress") matches the PascalCase strcase.ToCamel conversion of
+// the "embedded_address" header segment.
+type EmbeddedAddress struct {
+	Street string
+	City   string
+}
+
+type embeddedPersonRow struct {
+	Name string
+	EmbeddedAddress
+}
+
 func TestHeaderToMap(t *testing.T) {
 	h := headerToMap([]string{"name", "age"})
 
@@ -205,6 +220,11 @@ func (t terrainKind) ParseToAny(s string) any {
 		return terrainScrubForest
 	}
 	return terrainTundra
+}
+
+type enumRow struct {
+	Name    string
+	Terrain terrainKind
 }
 
 type mapTileRow struct {

@@ -81,3 +81,83 @@ func BenchmarkSillyDecodeCustomType(b *testing.B) {
 		_, _ = decoder.Decode(row)
 	}
 }
+
+func BenchmarkEncodeEmbedded(b *testing.B) {
+	header := []string{"name", "embedded_address.street", "embedded_address.city"}
+	item := embeddedPersonRow{Name: "Igor", EmbeddedAddress: EmbeddedAddress{Street: "Baker St", City: "Metropolis"}}
+	encoder := MakeEncoder[embeddedPersonRow](header)
+
+	for b.Loop() {
+		_, _ = encoder.Encode(item)
+	}
+}
+
+func BenchmarkSillyEncodeEmbedded(b *testing.B) {
+	header := []string{"name", "embedded_address.street", "embedded_address.city"}
+	item := embeddedPersonRow{Name: "Igor", EmbeddedAddress: EmbeddedAddress{Street: "Baker St", City: "Metropolis"}}
+
+	for b.Loop() {
+		encoder := MakeEncoder[embeddedPersonRow](header)
+		_, _ = encoder.Encode(item)
+	}
+}
+
+func BenchmarkDecodeEmbedded(b *testing.B) {
+	header := []string{"name", "embedded_address.street", "embedded_address.city"}
+	row := []string{"Igor", "Baker St", "Metropolis"}
+	decoder := MakeDecoder[embeddedPersonRow](header)
+
+	for b.Loop() {
+		_, _ = decoder.Decode(row)
+	}
+}
+
+func BenchmarkSillyDecodeEmbedded(b *testing.B) {
+	header := []string{"name", "embedded_address.street", "embedded_address.city"}
+	row := []string{"Igor", "Baker St", "Metropolis"}
+
+	for b.Loop() {
+		decoder := MakeDecoder[embeddedPersonRow](header)
+		_, _ = decoder.Decode(row)
+	}
+}
+
+func BenchmarkEncodeEnum(b *testing.B) {
+	header := []string{"name", "terrain"}
+	item := enumRow{Name: "Scrub Forest", Terrain: terrainScrubForest}
+	encoder := MakeEncoder[enumRow](header)
+
+	for b.Loop() {
+		_, _ = encoder.Encode(item)
+	}
+}
+
+func BenchmarkSillyEncodeEnum(b *testing.B) {
+	header := []string{"name", "terrain"}
+	item := enumRow{Name: "Scrub Forest", Terrain: terrainScrubForest}
+
+	for b.Loop() {
+		encoder := MakeEncoder[enumRow](header)
+		_, _ = encoder.Encode(item)
+	}
+}
+
+func BenchmarkDecodeEnum(b *testing.B) {
+	header := []string{"name", "terrain"}
+	row := []string{"Scrub Forest", "ScrubForest"}
+	decoder := MakeDecoder[enumRow](header)
+
+	for b.Loop() {
+		_, _ = decoder.Decode(row)
+	}
+}
+
+func BenchmarkSillyDecodeEnum(b *testing.B) {
+	header := []string{"name", "terrain"}
+	row := []string{"Scrub Forest", "ScrubForest"}
+
+	for b.Loop() {
+		decoder := MakeDecoder[enumRow](header)
+		_, _ = decoder.Decode(row)
+	}
+}
