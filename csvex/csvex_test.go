@@ -80,7 +80,8 @@ func TestEncodeDecodeScalars(t *testing.T) {
 	item := simpleRow{Name: "Igor", Age: 42, Score: 3.5, Active: true}
 
 	encoder := MakeEncoder[simpleRow](header)
-	row, err := encoder.Encode(item)
+	row := make([]string, len(header))
+	err := encoder.Encode(item, row)
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"Igor", "42", "3.5", "true"}, row)
@@ -98,7 +99,8 @@ func TestEncodeDecodeCustomType(t *testing.T) {
 	item := coloredRow{Name: "sky", Color: testColor{R: 10, G: 20, B: 30}}
 
 	encoder := MakeEncoder[coloredRow](header)
-	row, err := encoder.Encode(item)
+	row := make([]string, len(header))
+	err := encoder.Encode(item, row)
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"sky", "10/20/30"}, row)
@@ -138,7 +140,8 @@ func TestEncodeNestedStruct(t *testing.T) {
 	item := nestedPersonRow{Name: "Igor", Address: nestedAddress{Street: "Baker St", City: "Metropolis"}}
 
 	encoder := MakeEncoder[nestedPersonRow](header)
-	row, err := encoder.Encode(item)
+	row := make([]string, len(header))
+	err := encoder.Encode(item, row)
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"Igor", "Baker St", "Metropolis"}, row)

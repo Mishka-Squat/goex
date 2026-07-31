@@ -6,19 +6,21 @@ func BenchmarkEncode(b *testing.B) {
 	header := []string{"name", "age", "score", "active"}
 	item := simpleRow{Name: "Igor", Age: 42, Score: 3.5, Active: true}
 	encoder := MakeEncoder[simpleRow](header)
+	row := make([]string, len(header))
 
 	for b.Loop() {
-		_, _ = encoder.Encode(item)
+		_ = encoder.Encode(item, row)
 	}
 }
 
 func BenchmarkSillyEncode(b *testing.B) {
 	header := []string{"name", "age", "score", "active"}
 	item := simpleRow{Name: "Igor", Age: 42, Score: 3.5, Active: true}
+	row := make([]string, len(header))
 
 	for b.Loop() {
 		encoder := MakeEncoder[simpleRow](header)
-		_, _ = encoder.Encode(item)
+		_ = encoder.Encode(item, row)
 	}
 }
 
@@ -46,19 +48,21 @@ func BenchmarkEncodeCustomType(b *testing.B) {
 	header := []string{"name", "color"}
 	item := coloredRow{Name: "sky", Color: testColor{R: 10, G: 20, B: 30}}
 	encoder := MakeEncoder[coloredRow](header)
+	row := make([]string, len(header))
 
 	for b.Loop() {
-		_, _ = encoder.Encode(item)
+		_ = encoder.Encode(item, row)
 	}
 }
 
 func BenchmarkSillyEncodeCustomType(b *testing.B) {
 	header := []string{"name", "color"}
 	item := coloredRow{Name: "sky", Color: testColor{R: 10, G: 20, B: 30}}
+	row := make([]string, len(header))
 
 	for b.Loop() {
 		encoder := MakeEncoder[coloredRow](header)
-		_, _ = encoder.Encode(item)
+		_ = encoder.Encode(item, row)
 	}
 }
 
@@ -86,19 +90,21 @@ func BenchmarkEncodeEmbedded(b *testing.B) {
 	header := []string{"name", "embedded_address.street", "embedded_address.city"}
 	item := embeddedPersonRow{Name: "Igor", EmbeddedAddress: EmbeddedAddress{Street: "Baker St", City: "Metropolis"}}
 	encoder := MakeEncoder[embeddedPersonRow](header)
+	row := make([]string, len(header))
 
 	for b.Loop() {
-		_, _ = encoder.Encode(item)
+		_ = encoder.Encode(item, row)
 	}
 }
 
 func BenchmarkSillyEncodeEmbedded(b *testing.B) {
 	header := []string{"name", "embedded_address.street", "embedded_address.city"}
 	item := embeddedPersonRow{Name: "Igor", EmbeddedAddress: EmbeddedAddress{Street: "Baker St", City: "Metropolis"}}
+	row := make([]string, len(header))
 
 	for b.Loop() {
 		encoder := MakeEncoder[embeddedPersonRow](header)
-		_, _ = encoder.Encode(item)
+		_ = encoder.Encode(item, row)
 	}
 }
 
@@ -126,19 +132,21 @@ func BenchmarkEncodeEnum(b *testing.B) {
 	header := []string{"name", "terrain"}
 	item := enumRow{Name: "Scrub Forest", Terrain: terrainScrubForest}
 	encoder := MakeEncoder[enumRow](header)
+	row := make([]string, len(header))
 
 	for b.Loop() {
-		_, _ = encoder.Encode(item)
+		_ = encoder.Encode(item, row)
 	}
 }
 
 func BenchmarkSillyEncodeEnum(b *testing.B) {
 	header := []string{"name", "terrain"}
 	item := enumRow{Name: "Scrub Forest", Terrain: terrainScrubForest}
+	row := make([]string, len(header))
 
 	for b.Loop() {
 		encoder := MakeEncoder[enumRow](header)
-		_, _ = encoder.Encode(item)
+		_ = encoder.Encode(item, row)
 	}
 }
 

@@ -97,11 +97,10 @@ func WriteCsvTable[T any](w io.Writer, header []string, items []CsvRow[T]) error
 	row := make([]string, len(header)+1)
 	for _, item := range items {
 		row[0] = item.Id
-		encoded, err := encoder.Encode(item.T)
+		err := encoder.Encode(item.T, row[1:])
 		if err != nil {
 			return err
 		}
-		copy(row[1:], encoded)
 
 		if err := writer.Write(row); err != nil {
 			return err

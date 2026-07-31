@@ -4,7 +4,6 @@ import (
 	"reflect"
 	"strconv"
 
-	"github.com/Mishka-Squat/goex/gx"
 	"github.com/Mishka-Squat/mengine/src/core/log"
 	"github.com/iancoleman/strcase"
 )
@@ -121,10 +120,7 @@ func appendEncodeOps(e *Encoder, rtype reflect.Type, header headerMap, path []in
 		if field.Type.Implements(formatterType) {
 			e.Ops = append(e.Ops, func(root reflect.Value) (string, error) {
 				v := root.FieldByIndex(fieldPath)
-				method := gx.MustValid(v.MethodByName("String"))
-				rv := method.Call(nil)
-
-				return rv[0].String(), nil
+				return v.Interface().(CsvFormatter).String(), nil
 			})
 			continue
 		}
@@ -140,9 +136,8 @@ func appendEncodeOps(e *Encoder, rtype reflect.Type, header headerMap, path []in
 	}
 }
 
-func (e EncoderT[T]) Encode(item T) ([]string, error) {
+func (e EncoderT[T]) Encode(item T, row []string) error {
 	v := reflect.ValueOf(&item).Elem()
-	row := make([]string, len(e.Ops))
 
 	var firstErr error
 	for i, op := range e.Ops {
@@ -156,5 +151,5 @@ func (e EncoderT[T]) Encode(item T) ([]string, error) {
 		row[i] = s
 	}
 
-	return row, firstErr
+	return firstErr
 }

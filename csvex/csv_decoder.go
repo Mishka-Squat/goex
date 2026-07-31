@@ -4,7 +4,6 @@ import (
 	"reflect"
 	"strconv"
 
-	"github.com/Mishka-Squat/goex/gx"
 	"github.com/Mishka-Squat/mengine/src/core/log"
 	"github.com/iancoleman/strcase"
 )
@@ -240,11 +239,8 @@ func appendDecodeOps(d *Decoder, header headerMap, rtype reflect.Type, path []in
 		if field.Type.Implements(parserType) {
 			d.Ops = append(d.Ops, func(root reflect.Value, s string) error {
 				v := root.FieldByIndex(fieldPath)
-				method := gx.MustValid(v.MethodByName("ParseToAny"))
-				pv := method.Call([]reflect.Value{
-					reflect.ValueOf(s),
-				})
-				v.Set(pv[0].Elem())
+				pv := reflect.ValueOf(v.Interface().(CsvParser).ParseToAny(s))
+				v.Set(pv)
 
 				return nil
 			})
