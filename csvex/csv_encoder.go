@@ -150,10 +150,9 @@ func (e *Encoder) appendMapEncodeOps(mapType reflect.Type, header headerMap, fie
 	elemType := mapType.Elem()
 
 	parserType := reflect.TypeFor[CsvParser]()
-	if !keyType.Implements(parserType) {
+	if !reflect.PointerTo(keyType).Implements(parserType) {
 		log.Fatal("wht")
 	}
-	mapKey := reflect.Zero(keyType)
 
 	formatterType := reflect.TypeFor[CsvFormatter]()
 
@@ -162,7 +161,10 @@ func (e *Encoder) appendMapEncodeOps(mapType reflect.Type, header headerMap, fie
 			continue // TODO: handle error, nested maps not supported
 		}
 
-		mapKey.Interface().(CsvParser).Parse(name)
+		mapKey := reflect.New(keyType).Elem()
+		if err := mapKey.Addr().Interface().(CsvParser).Parse(name); err != nil {
+			log.Fatal("wht")
+		}
 
 		if elemType.Implements(formatterType) {
 			e.Ops = append(e.Ops, func(root reflect.Value) (string, error) {

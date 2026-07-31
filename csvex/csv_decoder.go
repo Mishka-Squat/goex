@@ -240,13 +240,10 @@ func (d *Decoder) appendDecodeOps(header headerMap, rtype reflect.Type, path ...
 		}
 
 		parserType := reflect.TypeFor[CsvParser]()
-		if field.Type.Implements(parserType) {
+		if reflect.PointerTo(field.Type).Implements(parserType) {
 			d.Ops = append(d.Ops, func(root reflect.Value, s string) error {
 				v := root.FieldByIndex(fieldPath)
-				v.Interface().(CsvParser).Parse(s)
-				v.Set(v)
-
-				return nil
+				return v.Addr().Interface().(CsvParser).Parse(s)
 			})
 			continue
 		}
@@ -272,17 +269,18 @@ func (d *Decoder) appendMapDecodeOps(header headerMap, mapType reflect.Type, fie
 	elemType := mapType.Elem()
 
 	parserType := reflect.TypeFor[CsvParser]()
-	if !keyType.Implements(parserType) {
+	if !reflect.PointerTo(keyType).Implements(parserType) {
 		log.Fatal("wht")
 	}
-	mapKey := reflect.Zero(keyType)
-
 	for name, leaf := range header.All() {
 		if _, ok := leaf.(headerMap); ok {
 			continue // TODO: handle error, nested maps not supported
 		}
 
-		mapKey.Interface().(CsvParser).Parse(name)
+		mapKey := reflect.New(keyType).Elem()
+		if err := mapKey.Addr().Interface().(CsvParser).Parse(name); err != nil {
+			log.Fatal("wht")
+		}
 
 		ensureMap := func(root reflect.Value) reflect.Value {
 			m := root.FieldByIndex(fieldPath)
@@ -292,11 +290,13 @@ func (d *Decoder) appendMapDecodeOps(header headerMap, mapType reflect.Type, fie
 			return m
 		}
 
-		if elemType.Implements(parserType) {
+		if reflect.PointerTo(elemType).Implements(parserType) {
 			d.Ops = append(d.Ops, func(root reflect.Value, s string) error {
 				m := ensureMap(root)
-				mapElem := reflect.Zero(elemType)
-				mapElem.Interface().(CsvParser).Parse(s)
+				mapElem := reflect.New(elemType).Elem()
+				if err := mapElem.Addr().Interface().(CsvParser).Parse(s); err != nil {
+					return err
+				}
 				m.SetMapIndex(mapKey, mapElem)
 				return nil
 			})
