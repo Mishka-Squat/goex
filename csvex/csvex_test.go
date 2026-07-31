@@ -261,18 +261,19 @@ const mapTileCsv = "id,terrain,name,yield.Food,yield.Ore,is_forest,is_mountains\
 	"9,ScrubForest,Scrub Forest,1,1,true,false\n" +
 	"19,Tundra,Mountains,0,4,false,true\n"
 
-// TestReadCsvTable_MapTile documents three known limitations that show up
+// TestReadCsvTable_MapTile documents two known limitations that show up
 // together on a realistic, game-shaped struct:
 //   - terrainKind's underlying kind (uint8) is looked up in globalDecoders
 //     before its CsvParser implementation is considered, so it's parsed as a
 //     plain integer, fails, and silently stays at its zero value instead of
 //     going through ParseToAny.
-//   - stringsex.Title only capitalizes the first letter ("is_forest" ->
-//     "Is_forest"), which never matches the Go field name "IsForest", so
-//     that column's op is silently dropped.
 //   - a dotted header segment ("yield.Food") is only wired up when the
-//     target field is itself a struct; Yield is a slice, so the whole
-//     "yield.*" pair of ops is silently dropped too.
+//     target field is itself a struct; Yield is a slice, so the "yield.*"
+//     pair of ops is silently dropped, and since Ops are matched to columns
+//     by position rather than by the header index they came from, every op
+//     downstream of the dropped pair reads from the wrong column: IsForest
+//     and IsMountains end up populated from the yield.Food/yield.Ore values
+//     instead of their own columns.
 func TestReadCsvTable_MapTile(t *testing.T) {
 	rows, err := ReadCsvTable[mapTileRow](strings.NewReader(mapTileCsv))
 	require.NoError(t, err)
@@ -281,23 +282,31 @@ func TestReadCsvTable_MapTile(t *testing.T) {
 	for _, row := range rows {
 		assert.Equal(t, terrainTundra, row.T.Terrain)
 		assert.Nil(t, row.T.Yield)
-		assert.False(t, row.T.IsForest)
-		assert.False(t, row.T.IsMountains)
 	}
 
 	assert.Equal(t, "Tundra", rows[0].T.Name)
+	assert.False(t, rows[0].T.IsForest)
+	assert.False(t, rows[0].T.IsMountains)
+
+	// yield.Food=1, yield.Ore=1 leak into IsForest/IsMountains as ParseBool("1") == true.
 	assert.Equal(t, "Scrub Forest", rows[1].T.Name)
+	assert.True(t, rows[1].T.IsForest)
+	assert.True(t, rows[1].T.IsMountains)
+
 	assert.Equal(t, "Mountains", rows[2].T.Name)
+	assert.False(t, rows[2].T.IsForest)
+	assert.False(t, rows[2].T.IsMountains)
 }
 
 // TestWriteCsvTable_MapTile mirrors the same limitations on the encode side:
 // Terrain is written as its raw numeric kind ("1") instead of through
-// CsvFormatter.String(), and the yield/is_forest/is_mountains columns are
-// left blank because their ops were never generated.
+// CsvFormatter.String(), and IsForest's value lands in the yield.Food/
+// yield.Ore columns instead of is_forest/is_mountains, which are left blank.
 func TestWriteCsvTable_MapTile(t *testing.T) {
 	items := []CsvRow[mapTileRow]{
 		{Id: "9", T: mapTileRow{
-			Terrain: terrainScrubForest, Name: "Scrub Forest",
+			Terrain:  terrainScrubForest,
+			Name:     "Scrub Forest",
 			Yield:    []uint8{1, 1},
 			IsForest: true,
 		}},
@@ -308,7 +317,7 @@ func TestWriteCsvTable_MapTile(t *testing.T) {
 	require.NoError(t, err)
 
 	want := "id,terrain,name,yield.Food,yield.Ore,is_forest,is_mountains\n" +
-		"9,1,Scrub Forest,,,,\n"
+		"9,1,Scrub Forest,true,false,,\n"
 	assert.Equal(t, want, buf.String())
 }
 

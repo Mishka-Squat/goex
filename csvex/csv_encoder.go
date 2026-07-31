@@ -5,8 +5,8 @@ import (
 	"strconv"
 
 	"github.com/Mishka-Squat/goex/gx"
-	"github.com/Mishka-Squat/goex/stringsex"
 	"github.com/Mishka-Squat/mengine/src/core/log"
+	"github.com/iancoleman/strcase"
 )
 
 // encOp always receives the *root* struct value (T). The reflect
@@ -117,7 +117,7 @@ func appendEncodeOps(e *Encoder, rtype reflect.Type, header HeaderMap, path []in
 	fields := fieldsByName(rtype)
 
 	for name, header := range header.All() {
-		name = stringsex.Title(name)
+		name = strcase.ToCamel(name)
 		field, ok := fields[name]
 		if !ok {
 			continue // TODO: handle error
