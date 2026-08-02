@@ -16,7 +16,6 @@ func WaitGroupGo(waitFn func(), fn ...func()) {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(len(fn))
 
 	for _, f := range fn {
 		wg.Go(f)
