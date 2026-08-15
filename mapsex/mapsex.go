@@ -1,6 +1,7 @@
 package mapsex
 
 import (
+	"cmp"
 	"iter"
 	"maps"
 	"slices"
@@ -157,4 +158,20 @@ func Intersect[K comparable, V any](m1, m2 map[K]V) bool {
 	}
 
 	return false
+}
+
+func SortedSeq[K interface {
+	comparable
+	cmp.Ordered
+}, V any](m map[K]V) iter.Seq2[K, V] {
+	keys := slices.Collect(maps.Keys(m))
+	slices.Sort(keys)
+
+	return func(yield func(K, V) bool) {
+		for _, k := range keys {
+			if !yield(k, m[k]) {
+				return
+			}
+		}
+	}
 }
