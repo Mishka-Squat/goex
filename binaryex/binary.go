@@ -423,7 +423,21 @@ func Write(w io.Writer, order ByteOrder, data any) error {
 	v := reflect.Indirect(reflect.ValueOf(data))
 	size := dataSize(v)
 	if size < 0 {
-		return errors.New("binary.Write: some values are not fixed-sized in type " + reflect.TypeOf(data).String())
+		switch v.Kind() {
+		case reflect.Slice, reflect.Array:
+			t := v.Type().Elem()
+			if t.Kind() == reflect.Interface {
+				if v.Len() == 0 {
+					size = 0
+				}
+
+				size = v.Len() * dataSize(v.Index(0).Elem())
+			}
+		}
+
+		if size < 0 {
+			return errors.New("binary.Write: some values are not fixed-sized in type " + reflect.TypeOf(data).String())
+		}
 	}
 
 	buf := make([]byte, size)
@@ -711,6 +725,9 @@ func dataSize(v reflect.Value) int {
 			return size * v.Len()
 		}
 
+	case reflect.Interface:
+		return dataSize(v.Elem())
+
 	case reflect.Struct:
 		t := v.Type()
 		if size, ok := structSize.Load(t); ok {
@@ -850,6 +867,9 @@ func (d *decoder) value(v reflect.Value) {
 			d.value(v.Index(i))
 		}
 
+	case reflect.Interface:
+		d.value(v.Elem())
+
 	case reflect.Struct:
 		t := v.Type()
 		l := v.NumField()
@@ -918,6 +938,9 @@ func (e *encoder) value(v reflect.Value) {
 		for i := 0; i < l; i++ {
 			e.value(v.Index(i))
 		}
+
+	case reflect.Interface:
+		e.value(v.Elem())
 
 	case reflect.Struct:
 		t := v.Type()
