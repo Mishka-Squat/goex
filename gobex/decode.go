@@ -7,6 +7,7 @@
 package gobex
 
 import (
+	"bytes"
 	"encoding"
 	"errors"
 	"io"
@@ -964,6 +965,15 @@ func (dec *Decoder) decodeGobDecoder(ut *userTypeInfo, state *decoderState, valu
 	case xGob:
 		gobDecoder, _ := reflect.TypeAssert[GobDecoder](value)
 		err = gobDecoder.GobDecode(b)
+	case xGobEx:
+		data_dec := NewDecoder(bytes.NewReader(b))
+		data_dec.wireType = dec.wireType
+		data_dec.decoderCache = dec.decoderCache
+		data_dec.ignorerCache = dec.ignorerCache
+		data_dec.TypeTransformFunctions = dec.TypeTransformFunctions
+
+		gobDecoder, _ := reflect.TypeAssert[GobDecoderEx](value)
+		err = gobDecoder.GobDecodeEx(data_dec)
 	case xBinary:
 		binaryUnmarshaler, _ := reflect.TypeAssert[encoding.BinaryUnmarshaler](value)
 		err = binaryUnmarshaler.UnmarshalBinary(b)
@@ -1244,7 +1254,7 @@ func (dec *Decoder) compatibleType(fr reflect.Type, fw typeId, inProgress map[re
 	// We could possibly relax this constraint in the future in order to
 	// choose the decoding method using the data in the wireType.
 	// The parentheses look odd but are correct.
-	if (ut.externalDec == xGob) != (ok && wire.GobEncoderT != nil) ||
+	if (ut.externalDec == xGob || ut.externalDec == xGobEx) != (ok && wire.GobEncoderT != nil) ||
 		(ut.externalDec == xBinary) != (ok && wire.BinaryMarshalerT != nil) ||
 		(ut.externalDec == xText) != (ok && wire.TextMarshalerT != nil) {
 		return false

@@ -7,6 +7,7 @@
 package gobex
 
 import (
+	"bytes"
 	"encoding"
 	"encoding/binary"
 	"math"
@@ -462,6 +463,18 @@ func (enc *Encoder) encodeGobEncoder(b *encBuffer, ut *userTypeInfo, v reflect.V
 	case xGob:
 		gobEncoder, _ := reflect.TypeAssert[GobEncoder](v)
 		data, err = gobEncoder.GobEncode()
+	case xGobEx:
+		data_buf := &bytes.Buffer{}
+		data_enc := NewEncoder(data_buf)
+		data_enc.sent = enc.sent
+		data_enc.typeById = enc.typeById
+		data_enc.TypeTransformFunctions = enc.TypeTransformFunctions
+
+		gobEncoder, _ := reflect.TypeAssert[GobEncoderEx](v)
+		err = gobEncoder.GobEncodeEx(data_enc)
+		if err == nil {
+			data = data_buf.Bytes()
+		}
 	case xBinary:
 		binaryMarshaler, _ := reflect.TypeAssert[encoding.BinaryMarshaler](v)
 		data, err = binaryMarshaler.MarshalBinary()

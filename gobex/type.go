@@ -35,6 +35,7 @@ const (
 	xGob    = 1 + iota // GobEncoder or GobDecoder
 	xBinary            // encoding.BinaryMarshaler or encoding.BinaryUnmarshaler
 	xText              // encoding.TextMarshaler or encoding.TextUnmarshaler
+	xGobEx
 )
 
 var userTypeCache sync.Map // map[reflect.Type]*userTypeInfo
@@ -78,6 +79,8 @@ func validUserType(rt reflect.Type) (*userTypeInfo, error) {
 
 	if ok, indir := implementsInterface(ut.user, gobEncoderInterfaceType); ok {
 		ut.externalEnc, ut.encIndir = xGob, indir
+	} else if ok, indir := implementsInterface(ut.user, gobEncoderExInterfaceType); ok {
+		ut.externalEnc, ut.encIndir = xGobEx, indir
 	} else if ok, indir := implementsInterface(ut.user, binaryMarshalerInterfaceType); ok {
 		ut.externalEnc, ut.encIndir = xBinary, indir
 	}
@@ -90,6 +93,8 @@ func validUserType(rt reflect.Type) (*userTypeInfo, error) {
 
 	if ok, indir := implementsInterface(ut.user, gobDecoderInterfaceType); ok {
 		ut.externalDec, ut.decIndir = xGob, indir
+	} else if ok, indir := implementsInterface(ut.user, gobDecoderExInterfaceType); ok {
+		ut.externalDec, ut.decIndir = xGobEx, indir
 	} else if ok, indir := implementsInterface(ut.user, binaryUnmarshalerInterfaceType); ok {
 		ut.externalDec, ut.decIndir = xBinary, indir
 	}
@@ -106,6 +111,8 @@ func validUserType(rt reflect.Type) (*userTypeInfo, error) {
 var (
 	gobEncoderInterfaceType        = reflect.TypeFor[GobEncoder]()
 	gobDecoderInterfaceType        = reflect.TypeFor[GobDecoder]()
+	gobEncoderExInterfaceType      = reflect.TypeFor[GobEncoderEx]()
+	gobDecoderExInterfaceType      = reflect.TypeFor[GobDecoderEx]()
 	binaryMarshalerInterfaceType   = reflect.TypeFor[encoding.BinaryMarshaler]()
 	binaryUnmarshalerInterfaceType = reflect.TypeFor[encoding.BinaryUnmarshaler]()
 	textMarshalerInterfaceType     = reflect.TypeFor[encoding.TextMarshaler]()
@@ -859,7 +866,7 @@ func buildTypeInfo(ut *userTypeInfo, rt reflect.Type) (*typeInfo, error) {
 		}
 		gt := userType.id().gobType().(*gobEncoderType)
 		switch ut.externalEnc {
-		case xGob:
+		case xGob, xGobEx:
 			info.wire.GobEncoderT = gt
 		case xBinary:
 			info.wire.BinaryMarshalerT = gt
@@ -924,6 +931,13 @@ type GobEncoder interface {
 	GobEncode() ([]byte, error)
 }
 
+type GobEncoderEx interface {
+	// GobEncodeEx returns a byte slice representing the encoding of the
+	// receiver for transmission to a GobDecoder, usually of the same
+	// concrete type.
+	GobEncodeEx(*Encoder) error
+}
+
 // GobDecoder is the interface describing data that provides its own
 // routine for decoding transmitted values sent by a GobEncoder.
 type GobDecoder interface {
@@ -931,6 +945,13 @@ type GobDecoder interface {
 	// with the value represented by the byte slice, which was written
 	// by GobEncode, usually for the same concrete type.
 	GobDecode([]byte) error
+}
+
+type GobDecoderEx interface {
+	// GobDecodeEx overwrites the receiver, which must be a pointer,
+	// with the value represented by the byte slice, which was written
+	// by GobEncode, usually for the same concrete type.
+	GobDecodeEx(*Decoder) error
 }
 
 var (
