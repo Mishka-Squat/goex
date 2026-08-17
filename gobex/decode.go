@@ -1114,7 +1114,7 @@ func (dec *Decoder) decOpFor(wireId typeId, rt reflect.Type, name string, inProg
 			}
 			op = func(state *decoderState, value reflect.Value) {
 				// indirect through enginePtr to delay evaluation for recursive structs.
-				dec.decodeStruct(engine, value)
+				state.dec.decodeStruct(engine, value)
 			}
 		case reflect.Interface:
 			op = func(state *decoderState, value reflect.Value) {
