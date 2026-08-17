@@ -731,6 +731,32 @@ func dataSize(v reflect.Value) int {
 	case reflect.Struct:
 		t := v.Type()
 		if size, ok := structSize.Load(t); ok {
+			// Rejected idea - dynamic slices,
+			// but implementation is complicated
+			// on save can calculate size of slice
+			// but on load need to read to get the size
+			// and that brings problems:
+			//   - different implementation
+			//   - possible security exploit - because there is no other way to validate input here
+			//
+			//if size.(int) == -2 {
+			//	size := 0
+			//	for i, n := 0, t.NumField(); i < n; i++ {
+			//		s := sizeof(t.Field(i).Type)
+			//		if s < 0 {
+			//			if s == -2 {
+			//				switch t.Kind() {
+			//				case reflect.Slice:
+			//					t.
+			//				}
+			//			}
+			//			return s
+			//		}
+			//		size += s
+			//	}
+			//	return size
+			//}
+
 			return size.(int)
 		}
 		size := sizeof(t)
@@ -759,7 +785,7 @@ func sizeof(t reflect.Type) int {
 		for i, n := 0, t.NumField(); i < n; i++ {
 			s := sizeof(t.Field(i).Type)
 			if s < 0 {
-				return -1
+				return s
 			}
 			sum += s
 		}
@@ -770,6 +796,9 @@ func sizeof(t reflect.Type) int {
 		reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128:
 		return int(t.Size())
+		//
+		//	case reflect.Slice:
+		//		return -2
 	}
 
 	return -1
