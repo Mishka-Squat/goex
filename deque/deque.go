@@ -101,8 +101,15 @@ func (d *Of[T]) Clear(capacity ...int) {
 	page_index := 0
 	item_index := 0
 	if len(capacity) > 0 {
-		page_index = capacity[0] / d.items_per_page
-		item_index = capacity[0] % d.items_per_page
+		cap := capacity[0]
+		maxcap := len(d.pages) * d.items_per_page
+		if cap < 0 {
+			cap = 0
+		} else if cap > maxcap {
+			cap = maxcap
+		}
+		page_index = cap / d.items_per_page
+		item_index = cap % d.items_per_page
 		if item_index != 0 {
 			page_index++
 		}
