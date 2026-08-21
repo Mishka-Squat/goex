@@ -160,7 +160,7 @@ func Intersect[K comparable, V any](m1, m2 map[K]V) bool {
 	return false
 }
 
-func SortedSeq[K interface {
+func SortedByKeySeq[K interface {
 	comparable
 	cmp.Ordered
 }, V any](m map[K]V) iter.Seq2[K, V] {
