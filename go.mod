@@ -1,6 +1,6 @@
 module github.com/Mishka-Squat/goex
 
-go 1.26
+go 1.27
 
 require (
 	deedles.dev/xiter v0.2.1
