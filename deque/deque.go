@@ -157,6 +157,10 @@ func (d Of[T]) Last() *T {
 }
 
 func (d Of[T]) Reserve(capacity int) Of[T] {
+	if capacity == 0 {
+		return d
+	}
+
 	page_index := capacity / d.items_per_page
 	item_index := capacity % d.items_per_page
 	if item_index != 0 {
